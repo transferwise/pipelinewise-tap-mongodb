@@ -1,0 +1,21 @@
+version: "3"
+
+services:
+  db:
+    container_name: "tap_mongodb_dev"
+    image: "mongo:4.2-bionic"
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongoAdmin
+      MONGO_INITDB_ROOT_PASSWORD: Password1
+    command: [mongod, --replSet, rs0]
+    networks:
+      - default
+
+networks:
+  default:
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.169.57.0/24
