@@ -7,7 +7,7 @@ services:
     ports:
       - 27017:27017
     environment:
-      MONGO_INITDB_ROOT_USERNAME: mongoAdmin
+      MONGO_INITDB_ROOT_USERNAME: mongoAdmin # These are dummy credentials for dev and test only
       MONGO_INITDB_ROOT_PASSWORD: Password1
     command: [mongod, --replSet, rs0]
     networks:

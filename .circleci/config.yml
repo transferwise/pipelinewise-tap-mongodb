@@ -5,7 +5,7 @@ jobs:
     docker:
       - image: mongo:4.2-bionic
         environment:
-          MONGO_INITDB_ROOT_USERNAME: mongoAdmin
+          MONGO_INITDB_ROOT_USERNAME: mongoAdmin # These are dummy credentials for CI checks only
           MONGO_INITDB_ROOT_PASSWORD: Password1
         command: [mongod, --replSet, rs0]
     steps:
