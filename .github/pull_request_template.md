@@ -7,8 +7,8 @@
 
 
 # QA steps
- - [] automated tests passing
- - [] manual QA steps passing (list below)
+ - [ ] automated tests passing
+ - [ ] manual QA steps passing (list below)
 
  
 # Risks
