@@ -34,5 +34,5 @@ test:
 
 test_cov:
 	coverage run -m pytest tests -v; \
-	coverage html -d coverage_html --include="tap_mongodb/*";
+	coverage report --include="tap_mongodb/*";
 
