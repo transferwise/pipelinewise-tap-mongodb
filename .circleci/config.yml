@@ -30,7 +30,7 @@ jobs:
           command: |
             virtualenv -p python3 ./virtualenvs/tap-mongodb
             source ./virtualenvs/tap-mongodb/bin/activate
-            make install
+            make setup
       - run:
           name: 'Pylinting'
           command: |
