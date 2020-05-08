@@ -16,35 +16,6 @@ class TestChangeStreams(unittest.TestCase):
         common.SCHEMA_COUNT.clear()
         common.SCHEMA_TIMES.clear()
 
-    def test_write_schema(self):
-        common.SCHEMA_COUNT['my_stream'] = 0
-        common.SCHEMA_TIMES['my_stream'] = 0
-
-        schema = {'type': 'object', 'properties': {}}
-        row = {
-            'key1': 1,
-            'key2': 'abc',
-            'key3': ['a', 'b'],
-            'key4': {}
-        }
-        stream = {
-            'tap_stream_id': 'my_stream'
-        }
-
-        change_streams.write_schema(schema, row, stream)
-
-        self.assertEqual({
-            'type': 'object',
-            'properties': {
-                'key3': {
-                    'anyOf': [{}]
-                },
-                'key4': {
-                    'anyOf': [{}]
-                }
-            }
-        }, schema)
-
     def test_update_bookmarks(self):
         state = {
             'bookmarks': {

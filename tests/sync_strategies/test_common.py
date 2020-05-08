@@ -7,6 +7,35 @@ import tap_mongodb.sync_strategies.common as common
 
 class TestRowToSchemaMessage(unittest.TestCase):
 
+    def test_write_schema(self):
+        common.SCHEMA_COUNT['my_stream'] = 0
+        common.SCHEMA_TIMES['my_stream'] = 0
+
+        schema = {'type': 'object', 'properties': {}}
+        row = {
+            'key1': 1,
+            'key2': 'abc',
+            'key3': ['a', 'b'],
+            'key4': {}
+        }
+        stream = {
+            'tap_stream_id': 'my_stream'
+        }
+
+        common.write_schema(schema, row, stream)
+
+        self.assertEqual({
+            'type': 'object',
+            'properties': {
+                'key3': {
+                    'anyOf': [{}]
+                },
+                'key4': {
+                    'anyOf': [{}]
+                }
+            }
+        }, schema)
+
     def test_no_change(self):
         row = {
             "a_str": "hello",
@@ -18,28 +47,28 @@ class TestRowToSchemaMessage(unittest.TestCase):
         }
 
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
         self.assertFalse(changed)
 
         # another row that looks the same keeps changed false
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
         self.assertFalse(changed)
 
         # a different looking row makes the schema change
         row = {"a_str": "hello",
                "a_date": bson.timestamp.Timestamp(1565897157, 1)}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
         self.assertTrue(changed)
 
         # the same (different) row again sets changed back to false
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
         self.assertFalse(changed)
 
 
     def test_simple_date(self):
         row = {"a_date": bson.timestamp.Timestamp(1565897157, 1)}
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
 
         expected = {"type": "object",
                     "properties": {
@@ -57,7 +86,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
     def test_simple_decimal(self):
         row = {"a_decimal": bson.Decimal128(decimal.Decimal('1.34'))}
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
 
         expected = {
             "type": "object",
@@ -76,7 +105,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
     def test_simple_float(self):
         row = {"a_float": 1.34}
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
 
         expected = {
             "type": "object",
@@ -97,8 +126,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         schema = {"type": "object", "properties": {}}
 
-        changed_decimal = common.row_to_schema(schema, decimal_row)
-        changed_float = common.row_to_schema(schema, float_row)
+        changed_decimal = common.update_schema_from_row(schema, decimal_row)
+        changed_float = common.update_schema_from_row(schema, float_row)
 
         expected = {
             "type": "object",
@@ -122,8 +151,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         schema = {"type": "object", "properties": {}}
 
-        changed_decimal = common.row_to_schema(schema, float_row)
-        changed_float = common.row_to_schema(schema, decimal_row)
+        changed_decimal = common.update_schema_from_row(schema, float_row)
+        changed_float = common.update_schema_from_row(schema, decimal_row)
 
         expected = {
             "type": "object",
@@ -146,8 +175,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         schema = {"type": "object", "properties": {}}
 
-        changed_float = common.row_to_schema(schema, float_row)
-        changed_float_2 = common.row_to_schema(schema, float_row_2)
+        changed_float = common.update_schema_from_row(schema, float_row)
+        changed_float_2 = common.update_schema_from_row(schema, float_row_2)
 
         expected = {
             "type": "object",
@@ -170,8 +199,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         schema = {"type": "object", "properties": {}}
 
-        changed_decimal = common.row_to_schema(schema, decimal_row)
-        changed_decimal_2 = common.row_to_schema(schema, decimal_row_2)
+        changed_decimal = common.update_schema_from_row(schema, decimal_row)
+        changed_decimal_2 = common.update_schema_from_row(schema, decimal_row_2)
 
         expected = {
             "type": "object",
@@ -194,8 +223,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         schema = {"type": "object", "properties": {}}
 
-        changed_date = common.row_to_schema(schema, date_row)
-        changed_decimal = common.row_to_schema(schema, decimal_row)
+        changed_date = common.update_schema_from_row(schema, date_row)
+        changed_decimal = common.update_schema_from_row(schema, decimal_row)
 
         expected = {
             "type": "object",
@@ -220,7 +249,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         date_row = {"foo": {"a_field": bson.timestamp.Timestamp(1565897157, 1)}}
         schema = {"type": "object", "properties": {}}
 
-        changed = common.row_to_schema(schema, date_row)
+        changed = common.update_schema_from_row(schema, date_row)
 
         expected = {
             "type": "object",
@@ -252,8 +281,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
         nested_row = {"foo": {"a_field": bson.timestamp.Timestamp(1565897157, 1)}}
         schema = {"type": "object", "properties": {}}
 
-        changed_date = common.row_to_schema(schema, date_row)
-        changed_nested = common.row_to_schema(schema, nested_row)
+        changed_date = common.update_schema_from_row(schema, date_row)
+        changed_nested = common.update_schema_from_row(schema, nested_row)
 
         expected = {
             "type": "object",
@@ -293,7 +322,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
             ]
         }
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
+        changed = common.update_schema_from_row(schema, row)
 
         expected = {
             "type": "object",
@@ -348,8 +377,8 @@ class TestRowToSchemaMessage(unittest.TestCase):
             ]
         }
         schema = {"type": "object", "properties": {}}
-        changed = common.row_to_schema(schema, row)
-        changed_2 = common.row_to_schema(schema, row_2)
+        changed = common.update_schema_from_row(schema, row)
+        changed_2 = common.update_schema_from_row(schema, row_2)
 
         expected = {
             "type": "object",

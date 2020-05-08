@@ -4,6 +4,7 @@ import time
 import pymongo
 import singer
 
+from typing import Optional, Dict
 from pymongo.collection import Collection
 from singer import utils
 
@@ -11,7 +12,16 @@ import tap_mongodb.sync_strategies.common as common
 
 LOGGER = singer.get_logger('tap_mongodb')
 
-def get_max_id_value(collection):
+
+def get_max_id_value(collection: Collection) -> Optional[str]:
+    """
+    Finds and returns the maximum ID in the collection if exists None otherwise
+    Args:
+        collection: MongoDB Collection instance
+
+    Returns: Max ID or None
+
+    """
     row = collection.find_one(sort=[("_id", pymongo.DESCENDING)])
     if row:
         return row['_id']
@@ -20,21 +30,23 @@ def get_max_id_value(collection):
     return None
 
 
-# pylint: disable=too-many-locals,invalid-name,too-many-statements
-def sync_collection(collection: Collection, stream, state, projection):
-    tap_stream_id = stream['tap_stream_id']
-    LOGGER.info('Starting full table sync for %s', tap_stream_id)
+def sync_collection(collection: Collection, stream: Dict, state: Dict, projection: Optional[str]) -> None:
+    """
+    Sync collection records incrementally
+    Args:
+        collection: MongoDB collection instance
+        stream: dictionary of all stream details
+        state: the tap state
+        projection: query projection if defined
+    """
+    LOGGER.info('Starting full table sync for %s', stream['tap_stream_id'])
 
-    #before writing the table version to state, check if we had one to begin with
+    # before writing the table version to state, check if we had one to begin with
     first_run = singer.get_bookmark(state, stream['tap_stream_id'], 'version') is None
 
     # last run was interrupted if there is a last_id_fetched bookmark
-    was_interrupted = singer.get_bookmark(state,
-                                          stream['tap_stream_id'],
-                                          'last_id_fetched') is not None
-
-    #pick a new table version if last run wasn't interrupted
-    if was_interrupted:
+    # pick a new table version if last run wasn't interrupted
+    if singer.get_bookmark(state, stream['tap_stream_id'], 'last_id_fetched') is not None:
         stream_version = singer.get_bookmark(state, stream['tap_stream_id'], 'version')
     else:
         stream_version = int(time.time() * 1000)
@@ -57,9 +69,8 @@ def sync_collection(collection: Collection, stream, state, projection):
 
     if singer.get_bookmark(state, stream['tap_stream_id'], 'max_id_value'):
         # There is a bookmark
-        max_id_value = singer.get_bookmark(state, stream['tap_stream_id'], 'max_id_value')
-        max_id_type = singer.get_bookmark(state, stream['tap_stream_id'], 'max_id_type')
-        max_id_value = common.string_to_class(max_id_value, max_id_type)
+        max_id_value = common.string_to_class(singer.get_bookmark(state, stream['tap_stream_id'], 'max_id_value'),
+                                              singer.get_bookmark(state, stream['tap_stream_id'], 'max_id_type'))
     else:
         max_id_value = get_max_id_value(collection)
 
@@ -81,63 +92,44 @@ def sync_collection(collection: Collection, stream, state, projection):
 
     find_filter = {'$lte': max_id_value}
     if last_id_fetched:
-        last_id_fetched_type = singer.get_bookmark(state,
-                                                   stream['tap_stream_id'],
-                                                   'last_id_fetched_type')
-        find_filter['$gte'] = common.string_to_class(last_id_fetched, last_id_fetched_type)
+        find_filter['$gte'] = common.string_to_class(last_id_fetched, singer.get_bookmark(state,
+                                                                                          stream['tap_stream_id'],
+                                                                                          'last_id_fetched_type'))
 
-    query_message = 'Querying {} with:\n\tFind Parameters: {}'.format(
-        stream['tap_stream_id'],
-        find_filter)
-    if projection:
-        query_message += '\n\tProjection: {}'.format(projection)
-    # pylint: disable=logging-format-interpolation
-    LOGGER.info(query_message)
-
+    LOGGER.info('Querying %s with: %s', stream['tap_stream_id'], dict(find=find_filter, projection=projection))
 
     with collection.find({'_id': find_filter},
                          projection,
                          sort=[("_id", pymongo.ASCENDING)]) as cursor:
         rows_saved = 0
-        time_extracted = utils.now()
         start_time = time.time()
 
         schema = {"type": "object", "properties": {}}
+
         for row in cursor:
             rows_saved += 1
 
-            schema_build_start_time = time.time()
-            if common.row_to_schema(schema, row):
-                singer.write_message(singer.SchemaMessage(
-                    stream=common.calculate_destination_stream_name(stream),
-                    schema=schema,
-                    key_properties=['_id']))
-                common.SCHEMA_COUNT[stream['tap_stream_id']] += 1
-            common.SCHEMA_TIMES[stream['tap_stream_id']] += time.time() - schema_build_start_time
+            common.write_schema(schema, row, stream)
 
-            record_message = common.row_to_singer_record(stream,
-                                                         row,
-                                                         stream_version,
-                                                         time_extracted)
-
-            singer.write_message(record_message)
+            singer.write_message(common.row_to_singer_record(stream,
+                                                             row,
+                                                             stream_version,
+                                                             utils.now()))
 
             state = singer.write_bookmark(state,
                                           stream['tap_stream_id'],
                                           'last_id_fetched',
-                                          common.class_to_string(row['_id'],
-                                                                 row['_id'].__class__.__name__))
+                                          common.class_to_string(row['_id'], row['_id'].__class__.__name__))
             state = singer.write_bookmark(state,
                                           stream['tap_stream_id'],
                                           'last_id_fetched_type',
                                           row['_id'].__class__.__name__)
 
-
             if rows_saved % common.UPDATE_BOOKMARK_PERIOD == 0:
                 singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
-        common.COUNTS[tap_stream_id] += rows_saved
-        common.TIMES[tap_stream_id] += time.time()-start_time
+        common.COUNTS[stream['tap_stream_id']] += rows_saved
+        common.TIMES[stream['tap_stream_id']] += time.time() - start_time
 
     # clear max pk value and last pk fetched upon successful sync
     singer.clear_bookmark(state, stream['tap_stream_id'], 'max_id_value')
@@ -145,11 +137,11 @@ def sync_collection(collection: Collection, stream, state, projection):
     singer.clear_bookmark(state, stream['tap_stream_id'], 'last_id_fetched')
     singer.clear_bookmark(state, stream['tap_stream_id'], 'last_id_fetched_type')
 
-    state = singer.write_bookmark(state,
-                                  stream['tap_stream_id'],
-                                  'initial_full_table_complete',
-                                  True)
+    singer.write_bookmark(state,
+                          stream['tap_stream_id'],
+                          'initial_full_table_complete',
+                          True)
 
     singer.write_message(activate_version_message)
 
-    LOGGER.info('Syncd {} records for {}'.format(rows_saved, tap_stream_id))
+    LOGGER.info('Syncd %s records for %s', rows_saved, stream['tap_stream_id'])

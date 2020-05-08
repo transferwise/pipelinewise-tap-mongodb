@@ -24,7 +24,7 @@ setup: create_venv setup_local_db upgrade_pip install_dep
 	python3 -m pip check
 
 pylint:
-	pylint tap_mongodb tap_mongodb/sync_strategies -d missing-docstring; \
+	pylint tap_mongodb tap_mongodb/sync_strategies --rcfile=pylintrc; \
 
 test:
 	pytest tests -v; \

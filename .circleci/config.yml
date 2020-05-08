@@ -31,12 +31,11 @@ jobs:
             virtualenv -p python3 ./virtualenvs/tap-mongodb
             source ./virtualenvs/tap-mongodb/bin/activate
             make install
-# Enable once all pylinting is done
-#      - run:
-#          name: 'Pylinting'
-#          command: |
-#            source ./virtualenvs/tap-mongodb/bin/activate
-#            make pylint --rcfile=pylintrc
+      - run:
+          name: 'Pylinting'
+          command: |
+            source ./virtualenvs/tap-mongodb/bin/activate
+            make pylint
       - run:
           name: 'Test'
           command: |

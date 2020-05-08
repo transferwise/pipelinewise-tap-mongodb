@@ -8,6 +8,9 @@ import singer
 from typing import List, Dict, Optional
 from pymongo import MongoClient
 from json import JSONDecodeError
+
+from pymongo.collection import Collection
+from pymongo.database import Database
 from singer import metadata, metrics, utils
 
 import tap_mongodb.sync_strategies.common as common
@@ -52,72 +55,123 @@ ROLES_WITH_ALL_DB_FIND_PRIVILEGES = {
 }
 
 
-def get_roles(client, config):
-    # usersInfo Command returns object in shape:
-    # {
-    #     <some_other_keys>
-    #     'users': [
-    #         {
-    #             '_id': <auth_db>.<user>,
-    #             'db': <auth_db>,
-    #             'mechanisms': ['SCRAM-SHA-1', 'SCRAM-SHA-256'],
-    #             'roles': [{'db': 'admin', 'role': 'readWriteAnyDatabase'},
-    #                       {'db': 'local', 'role': 'read'}],
-    #             'user': <user>,
-    #             'userId': <userId>
-    #         }
-    #     ]
-    # }
-    user_info = client[config['database']].command({'usersInfo': config['user']})
+def get_roles_with_find_privs(database: Database, user: Dict) -> List[Dict]:
+    """
+    Finds and returns all the user's roles that have find privileges.
+    User is dictionary in the form:
+     {
+         '_id': <auth_db>.<user>,
+         'db': <auth_db>,
+         'mechanisms': ['SCRAM-SHA-1', 'SCRAM-SHA-256'],
+         'roles': [{'db': 'admin', 'role': 'readWriteAnyDatabase'},
+                   {'db': 'local', 'role': 'read'}],
+         'user': <user>,
+         'userId': <userId>
+     }
+    Args:
+        database: MongoDB Database instance
+        user: db user dictionary
 
-    users = [u for u in user_info.get('users') if u.get('user') == config['user']]
-    if len(users) != 1:
-        LOGGER.warning('Could not find any users for %s', config['user'])
-        return []
+    Returns: list of roles
 
+    """
     roles = []
-    for role in users[0].get('roles', []):
-        if role.get('role') is None:
+
+    for role in user.get('roles', []):
+        if role.get('role') in ROLES_WITHOUT_FIND_PRIVILEGES:
             continue
 
         role_name = role['role']
-        # roles without find privileges
-        if role_name in ROLES_WITHOUT_FIND_PRIVILEGES:
-            continue
 
         # roles with find privileges
-        if role_name in ROLES_WITH_FIND_PRIVILEGES:
-            if role.get('db'):
-                roles.append(role)
+        if role_name in ROLES_WITH_FIND_PRIVILEGES and role.get('db'):
+            roles.append(role)
 
         # for custom roles, get the "sub-roles"
         else:
-            role_info_list = client[config['database']].command(
-                {'rolesInfo': {'role': role_name, 'db': config['database']}})
+            role_info_list = database.command({'rolesInfo': {'role': role_name, 'db': database.name}})
             role_info = [r for r in role_info_list.get('roles', []) if r['role'] == role_name]
+
             if len(role_info) != 1:
                 continue
-            for sub_role in role_info[0].get('roles', []):
-                if sub_role.get('role') in ROLES_WITH_FIND_PRIVILEGES and sub_role.get('db'):
-                    roles.append(sub_role)
+
+            roles.extend([sub_role for sub_role in role_info[0].get('roles', [])
+                          if sub_role.get('role') in ROLES_WITH_FIND_PRIVILEGES and sub_role.get('db')])
+
     return roles
 
 
-def get_databases(client, config):
-    roles = get_roles(client, config)
+def get_roles(database: Database, db_user: str) -> List[Dict]:
+    """
+    Get all user's roles with find privileges if user exists
+    Args:
+        database: MongoDB DB instance
+        db_user: DB user name to get roles for
+
+    Returns: List of roles found
+
+    """
+
+    # usersInfo Command  returns object in shape:
+    # {
+    #   < some_other_keys >
+    #   'users': [
+    #                {
+    #                    '_id': < auth_db >. < user >,
+    #                    'db': < auth_db >,
+    #                    'mechanisms': ['SCRAM-SHA-1', 'SCRAM-SHA-256'],
+    #                     'roles': [{'db': 'admin', 'role': 'readWriteAnyDatabase'},
+    #                               {'db': 'local', 'role': 'read'}],
+    #                     'user': < user >,
+    #                     'userId': < userId >
+    #                 }
+    #           ]
+    # }
+    user_info = database.command({'usersInfo': db_user})
+
+    users = [u for u in user_info.get('users') if u.get('user') == db_user]
+    if len(users) != 1:
+        LOGGER.warning('Could not find any users for %s', db_user)
+        return []
+
+    return get_roles_with_find_privs(database, users[0])
+
+
+def get_databases(client: MongoClient, config: Dict) -> List[str]:
+    """
+    Get all the databases in the cluster that the user roles can read from
+    Args:
+        client: MongoDB client instance
+        config: DB config
+
+    Returns: List of db names
+
+    """
+    roles = get_roles(client[config['database']], config['user'])
     LOGGER.info('Roles: %s', roles)
 
-    can_read_all = len([r for r in roles if r['role'] in ROLES_WITH_ALL_DB_FIND_PRIVILEGES]) > 0
+    can_read_all = len([role for role in roles
+                        if role['role'] in ROLES_WITH_ALL_DB_FIND_PRIVILEGES]) > 0
 
     if can_read_all:
         db_names = [d for d in client.list_database_names() if d not in IGNORE_DBS]
     else:
-        db_names = [r['db'] for r in roles if r['db'] not in IGNORE_DBS]
+        db_names = [role['db'] for role in roles if role['db'] not in IGNORE_DBS]
+
     LOGGER.info('Datbases: %s', db_names)
+
     return db_names
 
 
-def produce_collection_schema(collection):
+def produce_collection_schema(collection: Collection) -> Dict:
+    """
+    Generate a schema/catalog from the collection details for discovery mode
+    Args:
+        collection: stream Collection
+
+    Returns: collection catalog
+
+    """
     collection_name = collection.name
     collection_db_name = collection.database.name
 
@@ -157,20 +211,27 @@ def produce_collection_schema(collection):
     }
 
 
-def do_discover(client, config):
+def do_discover(client: MongoClient, config: Dict):
+    """
+    Run discovery mode where the mongodb cluster is scanned and all the collections are turned into streams
+    The result is dumped to stdout as json
+    Args:
+        client:MongoDB Client instance
+        config: DB config
+    """
     streams = []
 
     for db_name in get_databases(client, config):
-        # pylint: disable=invalid-name
-        db = client[db_name]
+        database = client[db_name]
 
-        collection_names = db.list_collection_names()
+        collection_names = database.list_collection_names()
         for collection_name in [c for c in collection_names
                                 if not c.startswith("system.")]:
 
-            collection = db[collection_name]
+            collection = database[collection_name]
             is_view = collection.options().get('viewOn') is not None
-            # TODO: Add support for views
+
+            # Add support for views if needed here
             if is_view:
                 continue
 
@@ -181,15 +242,31 @@ def do_discover(client, config):
     json.dump({'streams': streams}, sys.stdout, indent=2)
 
 
-def is_stream_selected(stream):
+def is_stream_selected(stream: Dict) -> bool:
+    """
+    Checks the stream's metadata to see if stream is selected for sync
+    Args:
+        stream: stream dictionary
+
+    Returns: True if selected, False otherwise
+
+    """
     mdata = metadata.to_map(stream['metadata'])
     is_selected = metadata.get(mdata, (), 'selected')
 
-    # pylint: disable=singleton-comparison
-    return is_selected == True
+    return is_selected is True
 
 
-def get_streams_to_sync(streams: List[Dict], state: Dict):
+def get_streams_to_sync(streams: List[Dict], state: Dict) -> List:
+    """
+    Filter the streams list to return only those selected for sync
+    Args:
+        streams: list of all discovered streams
+        state: streams state
+
+    Returns: list of selected streams, ordered from streams without state to those with state
+
+    """
     # get selected streams
     selected_streams = [stream for stream in streams if is_stream_selected(stream)]
 
@@ -209,13 +286,12 @@ def get_streams_to_sync(streams: List[Dict], state: Dict):
     # to that stream. Then process streams without prior state and finally
     # move onto streams with state (i.e. have been synced in the past)
     currently_syncing = singer.get_currently_syncing(state)
+
     if currently_syncing:
         currently_syncing_stream = list(filter(
             lambda s: s['tap_stream_id'] == currently_syncing,
             ordered_streams))
-        non_currently_syncing_streams = list(filter(lambda s: s['tap_stream_id']
-                                                              != currently_syncing,
-                                                    ordered_streams))
+        non_currently_syncing_streams = list(filter(lambda s: s['tap_stream_id'] != currently_syncing, ordered_streams))
 
         streams_to_sync = currently_syncing_stream + non_currently_syncing_streams
     else:
@@ -224,14 +300,27 @@ def get_streams_to_sync(streams: List[Dict], state: Dict):
     return streams_to_sync
 
 
-def write_schema_message(stream):
+def write_schema_message(stream: Dict):
+    """
+    Creates and writes a schema message to stdout
+    Args:
+        stream: stream catalog
+    """
     singer.write_message(singer.SchemaMessage(
         stream=common.calculate_destination_stream_name(stream),
         schema=stream['schema'],
         key_properties=['_id']))
 
 
-def load_stream_projection(stream: Dict)-> Optional[Dict]:
+def load_stream_projection(stream: Dict) -> Optional[Dict]:
+    """
+    Looks for pre defined projection in the stream metadata
+    Args:
+        stream: stream catalog
+
+    Returns: projection if found
+
+    """
     md_map = metadata.to_map(stream['metadata'])
     stream_projection = metadata.get(md_map, (), 'pipelinewise-tap-mongodb.projection')
     if stream_projection == '' or stream_projection == '""' or not stream_projection:
@@ -240,9 +329,8 @@ def load_stream_projection(stream: Dict)-> Optional[Dict]:
     try:
         stream_projection = json.loads(stream_projection)
     except (JSONDecodeError, TypeError):
-        err_msg = "The projection: {} for stream {} is not valid json"
-        raise InvalidProjectionException(err_msg.format(stream_projection,
-                                                               stream['tap_stream_id']))
+        err_msg = f"The projection: {stream_projection} for stream {stream['tap_stream_id']} is not valid json"
+        raise InvalidProjectionException(err_msg)
 
     if stream_projection and stream_projection.get('_id') == 0:
         raise InvalidProjectionException(
@@ -252,7 +340,16 @@ def load_stream_projection(stream: Dict)-> Optional[Dict]:
     return stream_projection
 
 
-def clear_state_on_replication_change(stream, state):
+def clear_state_on_replication_change(stream: Dict, state: Dict) -> Dict:
+    """
+    Clears the given state if replication method of given stream has changed
+    Args:
+        stream: stream dictionary
+        state: state
+
+    Returns: new state
+
+    """
     md_map = metadata.to_map(stream['metadata'])
     tap_stream_id = stream['tap_stream_id']
 
@@ -279,7 +376,14 @@ def clear_state_on_replication_change(stream, state):
     return state
 
 
-def sync_stream(client, stream, state):
+def sync_stream(client: MongoClient, stream: Dict, state: Dict):
+    """
+    Sync given stream
+    Args:
+        client: MongoDb client instance
+        stream: stream to sync
+        state: state
+    """
     tap_stream_id = stream['tap_stream_id']
 
     common.COUNTS[tap_stream_id] = 0
@@ -325,7 +429,14 @@ def sync_stream(client, stream, state):
     singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
 
-def do_sync(client, catalog, state):
+def do_sync(client: MongoClient, catalog: Dict, state: Dict):
+    """
+    Syncs all the selected streams in the catalog
+    Args:
+        client: MongoDb client instance
+        catalog: dictionary with all the streams details
+        state: state
+    """
     all_streams = catalog['streams']
     streams_to_sync = get_streams_to_sync(all_streams, state)
 
@@ -336,6 +447,9 @@ def do_sync(client, catalog, state):
 
 
 def main_impl():
+    """
+    Main method
+    """
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
 
@@ -374,6 +488,9 @@ def main_impl():
 
 
 def main():
+    """
+    Main
+    """
     try:
         main_impl()
     except Exception as exc:

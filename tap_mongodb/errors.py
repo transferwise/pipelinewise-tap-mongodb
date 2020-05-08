@@ -13,7 +13,7 @@ class InvalidReplicationMethodException(Exception):
 class InvalidProjectionException(Exception):
     """Raised if projection blacklists _id"""
 
-class UnsupportedReplicationKeyTypeException(Exception):
+class UnsupportedKeyTypeException(Exception):
     """Raised if key type is unsupported"""
 
 class MongoAssertionException(Exception):

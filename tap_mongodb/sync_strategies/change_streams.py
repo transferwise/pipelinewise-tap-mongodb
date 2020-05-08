@@ -1,10 +1,10 @@
 import copy
 import time
-import datetime
 import singer
 
 from typing import Set, Dict, Optional, Generator
 from pymongo.collection import Collection
+from singer import utils
 
 from tap_mongodb.sync_strategies import common
 
@@ -25,17 +25,6 @@ PIPELINE = [
     }
     }
 ]
-
-
-def write_schema(schema, row, stream):
-    schema_build_start_time = time.time()
-    if common.row_to_schema(schema, row):
-        singer.write_message(singer.SchemaMessage(
-            stream=common.calculate_destination_stream_name(stream),
-            schema=schema,
-            key_properties=['_id']))
-        common.SCHEMA_COUNT[stream['tap_stream_id']] += 1
-    common.SCHEMA_TIMES[stream['tap_stream_id']] += time.time() - schema_build_start_time
 
 
 def update_bookmarks(state: Dict, tap_stream_id: str, token: Dict) -> Dict:
@@ -130,11 +119,11 @@ def sync_collection(collection: Collection,
             operation = change['operationType']
 
             if operation == 'insert':
-                write_schema(schema, change['fullDocument'], stream)
+                common.write_schema(schema, change['fullDocument'], stream)
                 singer.write_message(common.row_to_singer_record(stream,
                                                                  change['fullDocument'],
                                                                  version,
-                                                                 datetime.datetime.now(tz=datetime.timezone.utc)))
+                                                                 utils.now()))
                 rows_saved += 1
 
             elif operation == 'update':
@@ -151,14 +140,14 @@ def sync_collection(collection: Collection,
                     '_id': change['documentKey']['_id']
                 }
 
-                write_schema(schema, doc, stream)
+                common.write_schema(schema, doc, stream)
 
                 # Delete ops only contain the _id of the row deleted
                 singer.write_message(
                     common.row_to_singer_record(stream,
                                                 doc,
                                                 version,
-                                                datetime.datetime.now(tz=datetime.timezone.utc))
+                                                utils.now())
                 )
                 rows_saved += 1
 
@@ -208,11 +197,11 @@ def flush_buffer(buffer: Set, stream: Dict, collection: Collection,
                                                 buffer,
                                                 stream_projection
                                                 ):
-        write_schema(schema, buffered_row, stream)
+        common.write_schema(schema, buffered_row, stream)
         record_message = common.row_to_singer_record(stream,
                                                      buffered_row,
                                                      version,
-                                                     datetime.datetime.now(tz=datetime.timezone.utc))
+                                                     utils.now())
         singer.write_message(record_message)
 
         rows_saved += 1
