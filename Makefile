@@ -2,7 +2,7 @@
 
 create_venv:
 	rm -Rf venv
-	virtualenv -p python3 ./venv
+	venv -p python3 ./venv
 
 setup_local_db:
 	chmod u+x bin/setup_local_db.sh
