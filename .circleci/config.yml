@@ -29,11 +29,13 @@ jobs:
       - run:
           name: 'Setup virtual env'
           command: |
+            source ./venv/bin/activate
             make upgrade_pip install_dep
 
       - run:
           name: 'Check dependencies'
           command: |
+            source ./venv/bin/activate
             make check_dep
 
       - save_cache:
@@ -44,11 +46,13 @@ jobs:
       - run:
           name: 'Pylinting'
           command: |
+            source ./venv/bin/activate
             make pylint
 
       - run:
           name: 'Test and coverage'
           command: |
+            source ./venv/bin/activate
             make test_cov
 
 workflows:
