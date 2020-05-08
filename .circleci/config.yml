@@ -35,7 +35,7 @@ jobs:
       - run:
           name: 'Check dependencies'
           command: |
-            source ./virtualenvs/tap-mongodb/bin/activate
+            source ./venv/bin/activate
             make check_dep
 
       - save_cache:
@@ -46,13 +46,13 @@ jobs:
       - run:
           name: 'Pylinting'
           command: |
-            source ./virtualenvs/tap-mongodb/bin/activate
+            source ./venv/bin/activate
             make pylint
 
       - run:
           name: 'Test'
           command: |
-            source ./virtualenvs/tap-mongodb/bin/activate
+            source ./venv/bin/activate
             make test
 
 workflows:
