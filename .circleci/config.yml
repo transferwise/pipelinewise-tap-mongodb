@@ -2,40 +2,53 @@ version: 3
 
 jobs:
   build:
+# enable once needed
+#    docker:
+#      - image: mongo:4.2-bionic
+#        environment:
+#          MONGO_INITDB_ROOT_USERNAME: mongoAdmin # These are dummy credentials for CI checks only
+#          MONGO_INITDB_ROOT_PASSWORD: Password1
+#        command: [mongod, --replSet, rs0]
     docker:
-      - image: mongo:4.2-bionic
-        environment:
-          MONGO_INITDB_ROOT_USERNAME: mongoAdmin # These are dummy credentials for CI checks only
-          MONGO_INITDB_ROOT_PASSWORD: Password1
-        command: [mongod, --replSet, rs0]
+      - image: circleci/python:3.6.2
     steps:
       - checkout
       - add_ssh_keys
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "requirements.txt" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
       - run:
-          name: 'Install Dockerize'
-          command: wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSION/dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && tar -C /usr/local/bin -xzvf dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz && rm dockerize-linux-amd64-$DOCKERIZE_VERSION.tar.gz
-          environment:
-            DOCKERIZE_VERSION: v0.3.0
-      - run:
-          name: 'Wait for Mongo'
+          name: 'Create virtual env'
           command: |
-            dockerize -wait tcp://127.0.0.1:27017 -timeout 1m
-            sleep 5
-      - run:
-          name: 'Setup Mongo'
-          command: |
-            mongo -u mongoAdmin -p Password1 --authenticationDatabase admin --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+            make create_venv
+
       - run:
           name: 'Setup virtual env'
           command: |
-            virtualenv -p python3 ./virtualenvs/tap-mongodb
+            source ./venv/bin/activate
+            make upgrade_pip install_dep
+
+      - run:
+          name: 'Check dependencies'
+          command: |
             source ./virtualenvs/tap-mongodb/bin/activate
-            make setup
+            make check_dep
+
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-{{ checksum "requirements.txt" }}
+
       - run:
           name: 'Pylinting'
           command: |
             source ./virtualenvs/tap-mongodb/bin/activate
             make pylint
+
       - run:
           name: 'Test'
           command: |

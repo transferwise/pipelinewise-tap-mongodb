@@ -19,9 +19,12 @@ install_dep:
 	. venv/bin/activate; \
 	python3 -m pip install -e .[test,dev]
 
-setup: create_venv setup_local_db upgrade_pip install_dep
+check_dep:
 	. venv/bin/activate; \
 	python3 -m pip check && echo "No conflicts" || exit 1
+
+setup: create_venv setup_local_db upgrade_pip install_dep check_dep
+	echo "Setup is finished"
 
 pylint:
 	pylint tap_mongodb tap_mongodb/sync_strategies --rcfile=pylintrc; \
