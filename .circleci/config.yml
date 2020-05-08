@@ -50,10 +50,10 @@ jobs:
             make pylint
 
       - run:
-          name: 'Test'
+          name: 'Test and coverage'
           command: |
             source ./venv/bin/activate
-            make test
+            make test_cov
 
 workflows:
   version: 2
