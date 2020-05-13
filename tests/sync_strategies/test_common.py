@@ -1,9 +1,20 @@
+import time
 import unittest
+import uuid
+from unittest.mock import patch
+
 import bson
 import decimal
+
+from datetime import datetime
+
+from bson import ObjectId, Timestamp, MinKey
+from dateutil.tz import tzutc
 from jsonschema import validate
 
 import tap_mongodb.sync_strategies.common as common
+from tap_mongodb.errors import UnsupportedKeyTypeException
+
 
 class TestRowToSchemaMessage(unittest.TestCase):
 
@@ -36,7 +47,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
             }
         }, schema)
 
-    def test_no_change(self):
+    def test_update_schema_from_row_with_no_change(self):
         row = {
             "a_str": "hello",
             "a_list": ["foo", "bar", 1, 2, {"name": "nick"}],
@@ -64,8 +75,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         changed = common.update_schema_from_row(schema, row)
         self.assertFalse(changed)
 
-
-    def test_simple_date(self):
+    def test_update_schema_from_row_with_simple_date(self):
         row = {"a_date": bson.timestamp.Timestamp(1565897157, 1)}
         schema = {"type": "object", "properties": {}}
         changed = common.update_schema_from_row(schema, row)
@@ -78,12 +88,11 @@ class TestRowToSchemaMessage(unittest.TestCase):
                                       {}]
                         }
                     }
-        }
+                    }
         self.assertTrue(changed)
         self.assertEqual(expected, schema)
 
-
-    def test_simple_decimal(self):
+    def test_update_schema_from_row_with_simple_decimal(self):
         row = {"a_decimal": bson.Decimal128(decimal.Decimal('1.34'))}
         schema = {"type": "object", "properties": {}}
         changed = common.update_schema_from_row(schema, row)
@@ -101,8 +110,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(expected, schema)
 
-
-    def test_simple_float(self):
+    def test_update_schema_from_row_simple_float(self):
         row = {"a_float": 1.34}
         schema = {"type": "object", "properties": {}}
         changed = common.update_schema_from_row(schema, row)
@@ -119,8 +127,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(expected, schema)
 
-
-    def test_decimal_then_float(self):
+    def test_update_schema_from_row_with_decimal_then_float(self):
         decimal_row = {"a_field": bson.Decimal128(decimal.Decimal('1.34'))}
         float_row = {"a_field": 1.34}
 
@@ -144,8 +151,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
         self.assertEqual(expected, schema)
 
-
-    def test_float_then_decimal(self):
+    def test_update_schema_from_row_with_float_then_decimal(self):
         float_row = {"a_field": 1.34}
         decimal_row = {"a_field": bson.Decimal128(decimal.Decimal('1.34'))}
 
@@ -169,7 +175,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed_decimal)
         self.assertEqual(expected, schema)
 
-    def test_float_then_float(self):
+    def test_update_schema_from_row_with_float_then_float(self):
         float_row = {"a_field": 1.34}
         float_row_2 = {"a_field": 1.34}
 
@@ -192,8 +198,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertFalse(changed_float_2)
         self.assertEqual(expected, schema)
 
-
-    def test_decimal_then_decimal(self):
+    def test_update_schema_from_row_with_decimal_then_decimal(self):
         decimal_row = {"a_field": bson.Decimal128(decimal.Decimal('1.34'))}
         decimal_row_2 = {"a_field": bson.Decimal128(decimal.Decimal('1.34'))}
 
@@ -207,7 +212,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
             "properties": {
                 "a_field": {
                     "anyOf": [{"type": "number",
-                              "multipleOf": decimal.Decimal('1e-34')},
+                               "multipleOf": decimal.Decimal('1e-34')},
                               {}]
                 }
             }
@@ -217,7 +222,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertFalse(changed_decimal_2)
         self.assertEqual(expected, schema)
 
-    def test_decimal_and_date(self):
+    def test_update_schema_from_row_with_decimal_and_date(self):
         date_row = {"a_field": bson.timestamp.Timestamp(1565897157, 1)}
         decimal_row = {"a_field": bson.Decimal128(decimal.Decimal('1.34'))}
 
@@ -244,8 +249,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed_decimal)
         self.assertEqual(expected, schema)
 
-
-    def test_nested_data(self):
+    def test_update_schema_from_row_with_nested_data(self):
         date_row = {"foo": {"a_field": bson.timestamp.Timestamp(1565897157, 1)}}
         schema = {"type": "object", "properties": {}}
 
@@ -276,7 +280,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(expected, schema)
 
-    def test_date_and_nested_data(self):
+    def test_update_schema_from_row_with_date_and_nested_data(self):
         date_row = {"foo": bson.timestamp.Timestamp(1565897157, 1)}
         nested_row = {"foo": {"a_field": bson.timestamp.Timestamp(1565897157, 1)}}
         schema = {"type": "object", "properties": {}}
@@ -314,7 +318,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed_nested)
         self.assertEqual(expected, schema)
 
-    def test_array_multiple_types(self):
+    def test_update_schema_from_row_with_array_multiple_types(self):
         row = {
             "foo": [
                 bson.timestamp.Timestamp(1565897157, 1),
@@ -353,7 +357,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(expected, schema)
 
-    def test_array_nested(self):
+    def test_update_schema_from_row_with_array_nested(self):
         row = {
             "foo": [
                 [
@@ -437,13 +441,144 @@ class TestRowToSchemaMessage(unittest.TestCase):
                 }
             }
         }
-        singer_row = {k:common.transform_value(v, [k]) for k, v in row_2.items()
+        singer_row = {k: common.transform_value(v, [k]) for k, v in row_2.items()
                       if type(v) not in [bson.min_key.MinKey, bson.max_key.MaxKey]}
 
-
-        decimal.getcontext().prec=100000
+        decimal.getcontext().prec = 100000
         validate(instance=singer_row, schema=schema)
 
         self.assertTrue(changed)
         self.assertFalse(changed_2)
         self.assertEqual(expected, schema)
+
+    def test_calculate_destination_stream_name_with_include_schema_True(self):
+        """
+
+        """
+        stream = {
+            'stream': 'myStream',
+            'metadata': [
+                {
+                    "breadcrumb": [],
+                    "metadata": {
+                        "database-name": "myDb",
+                    }
+                }
+            ]
+        }
+        with patch('tap_mongodb.common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME') as constant_mock:
+            constant_mock.return_value = True
+            self.assertEqual('myDb_myStream', common.calculate_destination_stream_name(stream))
+
+    def test_calculate_destination_stream_name_with_include_schema_False(self):
+        """
+
+        """
+        stream = {
+            'stream': 'myStream',
+            'metadata': [
+                {
+                    "breadcrumb": [],
+                    "metadata": {
+                        "database-name": "myDb",
+                    }
+                }
+            ]
+        }
+        common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = False
+        self.assertEqual('myStream', common.calculate_destination_stream_name(stream))
+
+    def test_get_stream_version_with_none_version_returns_new_version(self):
+
+        state = {
+            'bookmarks': {
+                'myStream': {}
+            }
+        }
+        self.assertGreaterEqual(time.time()*1000, common.get_stream_version('myStream', state))
+
+    def test_get_stream_version_with_defined_version_returns_the_same_version(self):
+
+        state = {
+            'bookmarks': {
+                'myStream': {'version': 123}
+            }
+        }
+        self.assertEqual(123, common.get_stream_version('myStream', state))
+
+    def test_class_to_string_with_bson_Timestamp_should_return_concatenated_time(self):
+        ts = bson.Timestamp(200000, 80)
+
+        self.assertEqual('200000.80', common.class_to_string(ts, 'Timestamp'))
+
+    def test_class_to_string_with_unsupported_type_raises_exception(self):
+        with self.assertRaises(UnsupportedKeyTypeException):
+            common.class_to_string('a', 'random type')
+
+    def test_transform_value_with_datetime_should_return_utc_formatted_date(self):
+        date = datetime(2020, 5, 13, 15, 00, 00)
+        self.assertEqual('2020-05-13T12:00:00.000000Z', common.transform_value(date, None))
+
+    def test_transform_value_with_bytes_should_return_decoded_string(self):
+        b = b'Pythonnnn'
+
+        self.assertEqual('UHl0aG9ubm5u', common.transform_value(b, None))
+
+    def test_transform_value_with_UUID_should_return_str(self):
+        uid = '123e4567-e89b-12d3-a456-426652340000'
+        self.assertEqual(uid, common.transform_value(uuid.UUID(uid), None))
+
+    def test_string_to_class_with_UUID(self):
+        uid = '123e4567-e89b-12d3-a456-426652340000'
+        self.assertEqual(uuid.UUID(uid), common.string_to_class(uid, 'UUID'))
+
+    def test_string_to_class_with_formatted_utc_datetime(self):
+        dt = '2020-05-10T12:01:50.000000Z'
+        self.assertEqual(datetime(2020, 5, 10, 12, 1, 50, tzinfo=tzutc()), common.string_to_class(dt, 'datetime'))
+
+    def test_string_to_class_with_ObjectId(self):
+        ob = '0123456789ab0123456789ab'
+        self.assertEqual(ObjectId('0123456789ab0123456789ab'), common.string_to_class(ob, 'ObjectId'))
+
+    def test_string_to_class_with_Timestamp(self):
+        ob = '3000.0'
+        self.assertEqual(Timestamp(3000, 0), common.string_to_class(ob, 'Timestamp'))
+
+    def test_string_to_class_with_unsupported_type_raises_exception(self):
+        with self.assertRaises(UnsupportedKeyTypeException):
+            common.string_to_class(1, 'some random type')
+
+    def test_row_to_singer_record_successful_transformation(self):
+        stream = {
+            'stream': 'myStream',
+            'metadata': [
+                {
+                    'breadcrumb': [],
+                    'metadata': {}
+                }
+            ]
+        }
+
+        row = {
+            '_id': ObjectId('0123456789ab0123456789ab'),
+            'key1': 10,
+            'key2': Timestamp(1589379991, 4696183),
+            'key3': 1.5,
+            'key4': MinKey()
+        }
+        dt = datetime(2020, 5, 13, 14, 10, 10, tzinfo=tzutc())
+
+        result = common.row_to_singer_record(stream, row, 100, dt)
+
+        self.assertEqual({
+            'type': 'RECORD',
+            'stream': 'myStream',
+            'record': {
+                '_id': '0123456789ab0123456789ab',
+                'key1': 10,
+                'key2': '2020-05-13T14:26:31.000000Z',
+                'key3': 1.5
+            },
+            'version': 100,
+            'time_extracted': '2020-05-13T14:10:10.000000Z'
+        }, result.asdict())
