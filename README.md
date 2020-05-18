@@ -23,7 +23,8 @@ Create json file called `config.json`, with the following contents:
   "user": "<username>",
   "host": "<host ip address>",
   "port": "<port>",
-  "database": "<database name>"
+  "auth_database": "<database name to authenticate on>",
+  "database": "<database name to sync from>"
 }
 ```
 The following parameters are optional for your config file:
@@ -87,11 +88,6 @@ To select a stream, enter the following to the stream's metadata:
 `<replication-method>` must be either `FULL_TABLE`, `INCREMENTAL` or `LOG_BASED`, if it's `INCREMENTAL`, make sure to add a `"replication-key"`.
 
 
-To add a projection to a stream, add the following to the stream's metadata field:
-```json
-"pipelinewise-tap-mongodb.projection": <projection>
-```
-
 For example, if you were to edit the example stream to select the stream as well as add a projection, config.json should look this:
 ```json
 {
@@ -113,8 +109,7 @@ For example, if you were to edit the example stream to select the stream as well
               "_id"
             ],
             "selected": true,
-            "replication-method": "<replication method>",
-            "pipelinewise-tap-mongodb.projection": "<projection>"
+            "replication-method": "<replication method>"
           }
         }
       ],

@@ -30,14 +30,13 @@ def get_max_id_value(collection: Collection) -> Optional[str]:
     return None
 
 
-def sync_collection(collection: Collection, stream: Dict, state: Dict, projection: Optional[str]) -> None:
+def sync_collection(collection: Collection, stream: Dict, state: Dict) -> None:
     """
     Sync collection records incrementally
     Args:
         collection: MongoDB collection instance
         stream: dictionary of all stream details
         state: the tap state
-        projection: query projection if defined
     """
     LOGGER.info('Starting full table sync for %s', stream['tap_stream_id'])
 
@@ -96,10 +95,9 @@ def sync_collection(collection: Collection, stream: Dict, state: Dict, projectio
                                                                                           stream['tap_stream_id'],
                                                                                           'last_id_fetched_type'))
 
-    LOGGER.info('Querying %s with: %s', stream['tap_stream_id'], dict(find=find_filter, projection=projection))
+    LOGGER.info('Querying %s with: %s', stream['tap_stream_id'], dict(find=find_filter))
 
     with collection.find({'_id': find_filter},
-                         projection,
                          sort=[("_id", pymongo.ASCENDING)]) as cursor:
         rows_saved = 0
         start_time = time.time()

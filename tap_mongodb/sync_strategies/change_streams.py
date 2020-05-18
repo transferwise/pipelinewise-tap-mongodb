@@ -4,6 +4,7 @@ import singer
 
 from typing import Set, Dict, Optional, Generator
 from pymongo.collection import Collection
+from pymongo.database import Database
 from singer import utils
 
 from tap_mongodb.sync_strategies import common
@@ -12,97 +13,105 @@ LOGGER = singer.get_logger('tap_mongodb')
 
 SDC_DELETED_AT = "_sdc_deleted_at"
 RESUME_TOKEN_KEY = 'token'
-MAX_AWAIT_TIME_MS = 120000  # 2 minutes
+MAX_AWAIT_TIME_MS = 300000  # 5 minutes
 MAX_UPDATE_BUFFER_LENGTH = 500
 
-PIPELINE = [
-    {'$match': {
-        '$or': [
-            {'operationType': 'insert'},
-            {'operationType': 'update'},
-            {'operationType': 'delete'}
-        ]
-    }
-    }
-]
 
-
-def update_bookmarks(state: Dict, tap_stream_id: str, token: Dict) -> Dict:
+def update_bookmarks(state: Dict, tap_stream_ids: Set[str], token: Dict) -> Dict:
     """
     Updates the stream state by re-setting the changeStream token
     Args:
         state: State dictionary
-        tap_stream_id: stream ID
+        tap_stream_ids: set of streams' ID
         token: resume token from changeStream
 
     Returns:
         state: updated state
     """
-    state = singer.write_bookmark(state, tap_stream_id, RESUME_TOKEN_KEY, token)
+    for stream in tap_stream_ids:
+        state = singer.write_bookmark(state, stream, RESUME_TOKEN_KEY, token)
+
     return state
 
 
 def get_buffer_rows_from_db(collection: Collection,
                             update_buffer: Set,
-                            stream_projection: Optional[Dict]
                             ) -> Generator:
     """
     Fetches the full documents of the IDs in the buffer from the DB
     Args:
         collection: MongoDB Collection instance
         update_buffer: A set of IDs whose documents needs to be fetched
-        stream_projection: projection for the query
     Returns:
         generator: it can be empty
     """
     query = {'_id': {'$in': list(update_buffer)}}
 
-    with collection.find(query, stream_projection) as cursor:
+    with collection.find(query) as cursor:
         yield from cursor
 
 
-def sync_collection(collection: Collection,
-                    stream: Dict,
-                    state: Dict,
-                    stream_projection: Optional[Dict]
-                    ) -> None:
+def get_token_from_state(streams_to_sync: Set[str], state: Dict) -> Optional[Dict]:
+    """
+    Extract the first non null resume token, provided all the logbased streams have the same token
+    Args:
+        streams_to_sync: set of log based streams
+        state: state dictionary
+
+    Returns: resume token if found, None otherwise
+
+    """
+    return next((stream_state[RESUME_TOKEN_KEY]
+                 for stream_name, stream_state in state.get('bookmarks', {}).items()
+                 if stream_name in streams_to_sync
+                 and stream_state.get(RESUME_TOKEN_KEY) is not None), None)
+
+
+def sync_database(database: Database,
+                  streams_to_sync: Dict[str, Dict],
+                  state: Dict
+                  ) -> None:
     """
     Syncs the records from the given collection using ChangeStreams
     Args:
-        collection: MongoDB Collection instance
-        stream: stream dictionary with all its details
+        database: MongoDB Database instance to sync
+        streams_to_sync: Dict of stream dictionary with all the stream details
         state: state dictionary
-        stream_projection: projection for querying
     """
-    tap_stream_id = stream['tap_stream_id']
-    LOGGER.info('Starting LogBased sync for %s', tap_stream_id)
+    LOGGER.info('Starting LogBased sync for streams "%s" in database "%s"', list(streams_to_sync.keys()), database.name)
 
-    # Write activate version message
-    version = common.get_stream_version(tap_stream_id, state)
-    singer.write_message(singer.ActivateVersionMessage(
-        stream=common.calculate_destination_stream_name(stream),
-        version=version
-    ))
-
-    rows_saved = 0
+    rows_saved = {}
     start_time = time.time()
+    update_buffer = {}
+    schemas = {}
 
-    update_buffer = set()
+    for stream_id in streams_to_sync:
+        update_buffer[stream_id] = set()
+        schemas[stream_id] = {"type": "object", "properties": {}}
+        rows_saved[stream_id] = 0
 
-    schema = {"type": "object", "properties": {}}
+    stream_ids = set(streams_to_sync.keys())
 
     # Init a cursor to listen for changes from the last saved resume token
     # if there are no changes after MAX_AWAIT_TIME_MS, then we'll exit
-    with collection.watch(
-            PIPELINE,
+    with database.watch(
+            [{'$match': {
+                '$or': [
+                    {'operationType': 'insert'}, {'operationType': 'update'}, {'operationType': 'delete'}
+                ],
+                '$and': [
+                    # watch collections of selected streams
+                    {'ns.coll': {'$in': [val['table_name'] for val in streams_to_sync.values()]}}
+                ]
+            }}],
             max_await_time_ms=MAX_AWAIT_TIME_MS,
-            start_after=state.get('bookmarks', {}).get(tap_stream_id).get(RESUME_TOKEN_KEY)) as cursor:
-
+            start_after=get_token_from_state(stream_ids, state)
+    ) as cursor:
         while cursor.alive:
 
             # Note that the ChangeStream's resume token may be updated
             # even when no changes are returned.
-            token = cursor.resume_token
+            resume_token = cursor.resume_token
 
             change = cursor.try_next()
 
@@ -111,101 +120,99 @@ def sync_collection(collection: Collection,
             if change is None:
                 LOGGER.debug('No change streams after % s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
 
-                state = update_bookmarks(state, tap_stream_id, token)
+                state = update_bookmarks(state, stream_ids, resume_token)
                 singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
                 break
 
+            tap_stream_id = f'{change["ns"]["db"]}-{change["ns"]["coll"]}'
+
             operation = change['operationType']
 
             if operation == 'insert':
-                common.write_schema(schema, change['fullDocument'], stream)
-                singer.write_message(common.row_to_singer_record(stream,
+                common.write_schema(schemas[tap_stream_id], change['fullDocument'], streams_to_sync[tap_stream_id])
+                singer.write_message(common.row_to_singer_record(streams_to_sync[tap_stream_id],
                                                                  change['fullDocument'],
-                                                                 version,
+                                                                 None,  # version
                                                                  utils.now()))
-                rows_saved += 1
+                rows_saved[tap_stream_id] += 1
 
             elif operation == 'update':
                 # update operation only return _id and updated fields in the row,
                 # so saving _id for now until we fetch the document when it's time to flush the buffer
-                update_buffer.add(change['documentKey']['_id'])
+                update_buffer[tap_stream_id].add(change['documentKey']['_id'])
 
             elif operation == 'delete':
                 # remove update from buffer if that document has been deleted
-                update_buffer.discard(change['documentKey']['_id'])
+                update_buffer[tap_stream_id].discard(change['documentKey']['_id'])
 
                 doc = {
                     SDC_DELETED_AT: change['clusterTime'].as_datetime().isoformat(),
                     '_id': change['documentKey']['_id']
                 }
 
-                common.write_schema(schema, doc, stream)
+                common.write_schema(schemas[tap_stream_id], doc, streams_to_sync[tap_stream_id])
 
                 # Delete ops only contain the _id of the row deleted
-                singer.write_message(
-                    common.row_to_singer_record(stream,
-                                                doc,
-                                                version,
-                                                utils.now())
-                )
-                rows_saved += 1
+                singer.write_message(common.row_to_singer_record(streams_to_sync[tap_stream_id],
+                                                                 doc,
+                                                                 None,
+                                                                 utils.now()))
+                rows_saved[tap_stream_id] += 1
 
-            state = update_bookmarks(state,
-                                     tap_stream_id,
-                                     token)
+            # update the states of all streams
+            state = update_bookmarks(state, stream_ids, resume_token)
 
             # flush buffer if it has filled up or flush and write state every UPDATE_BOOKMARK_PERIOD messages
+            if sum(len(stream_buffer) for stream_buffer in update_buffer.values()) >= MAX_UPDATE_BUFFER_LENGTH or \
+                    sum(rows_saved.values()) % common.UPDATE_BOOKMARK_PERIOD == 0:
 
-            if len(update_buffer) >= MAX_UPDATE_BUFFER_LENGTH or rows_saved % common.UPDATE_BOOKMARK_PERIOD == 0:
                 LOGGER.debug('Flushing update buffer ...')
 
-                rows_saved += flush_buffer(update_buffer, stream, collection, stream_projection, version, schema)
+                flush_buffer(update_buffer, streams_to_sync, database, None, schemas, rows_saved)
 
-                if rows_saved % common.UPDATE_BOOKMARK_PERIOD == 0:
+                if sum(rows_saved.values()) % common.UPDATE_BOOKMARK_PERIOD == 0:
                     # write state
                     singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
-        # flush buffer if finished with changeStreams
-        rows_saved += flush_buffer(update_buffer, stream, collection, stream_projection, version, schema)
+    # flush buffer if finished with changeStreams
+    flush_buffer(update_buffer, streams_to_sync, database, None, schemas, rows_saved)
 
-        common.COUNTS[tap_stream_id] += rows_saved
-        common.TIMES[tap_stream_id] += time.time() - start_time
+    for stream_id in stream_ids:
+        common.COUNTS[stream_id] += rows_saved[stream_id]
+        common.TIMES[stream_id] += time.time() - start_time
+        LOGGER.info('Syncd %s records for %s', rows_saved[stream_id], stream_id)
 
-        LOGGER.info('Syncd %s records for %s', rows_saved, tap_stream_id)
 
-
-def flush_buffer(buffer: Set, stream: Dict, collection: Collection,
-                 stream_projection: Optional[Dict], version: int, schema: Dict):
+def flush_buffer(buffer: Dict[str, Set], streams: Dict[str, Dict], database: Database,
+                 version: Optional[int], schemas: Dict[str, Dict], rows_saved: Dict[str, int]):
     """
-    Flush and reset the given buffer
+    Flush and reset the given buffer, it increments the row_saved count in the given rows_saved dictionary
     Args:
-        collection: mongoDB Collection instance
-        schema: json schema
-        buffer: A set of rows to flush
-        stream: stream whose rows to flush
-        stream_projection: the stream projection
-        version: stream version
-
+        database: mongoDB DB instance
+        schemas: json schema of all log based streams
+        buffer: A set of rows to flush per stream
+        streams: streams whose rows to flush
+        version: streams version
+        rows_saved: map of streams to number of rows saved, this dictionary needs to be incremented
     Returns:
 
     """
-    rows_saved = 0
+    # flush all streams buffers
+    for stream_id, stream_buffer in buffer.items():
 
-    # flush buffer before writing state
-    for buffered_row in get_buffer_rows_from_db(collection,
-                                                buffer,
-                                                stream_projection
-                                                ):
-        common.write_schema(schema, buffered_row, stream)
-        record_message = common.row_to_singer_record(stream,
-                                                     buffered_row,
-                                                     version,
-                                                     utils.now())
-        singer.write_message(record_message)
+        if stream_buffer:
+            stream = streams[stream_id]
 
-        rows_saved += 1
+            for buffered_row in get_buffer_rows_from_db(database[stream['table_name']],
+                                                        stream_buffer):
+                common.write_schema(schemas[stream_id], buffered_row, stream)
+                record_message = common.row_to_singer_record(stream,
+                                                             buffered_row,
+                                                             version,
+                                                             utils.now())
+                singer.write_message(record_message)
 
-    buffer.clear()
+                rows_saved[stream_id] += 1
 
-    return rows_saved
+            buffer[stream_id].clear()

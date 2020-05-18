@@ -10,9 +10,6 @@ class InvalidReplicationMethodException(Exception):
         super(InvalidReplicationMethodException, self).__init__(msg)
 
 
-class InvalidProjectionException(Exception):
-    """Raised if projection blacklists _id"""
-
 class UnsupportedKeyTypeException(Exception):
     """Raised if key type is unsupported"""
 
@@ -24,3 +21,9 @@ class MongoInvalidDateTimeException(Exception):
 
 class SyncException(Exception):
     """Raised if we find an invalid date-time that we can't handle"""
+
+class NoReadPrivilegeException(Exception):
+    """Raised if the DB user has no read privilege on the DB"""
+    def __init__(self, user, db_name):
+        msg = f"The user '{user}' has no read privilege on the database '{db_name}'!"
+        super(NoReadPrivilegeException, self).__init__(msg)

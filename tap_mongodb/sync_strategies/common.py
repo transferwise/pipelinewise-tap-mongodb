@@ -10,7 +10,7 @@ import singer
 import pytz
 import tzlocal
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from bson import objectid, timestamp, datetime as bson_datetime
 from singer import utils, metadata
 from terminaltables import AsciiTable
@@ -204,7 +204,7 @@ def transform_value(value: Any, path) -> Any:
 
 def row_to_singer_record(stream: Dict,
                          row: Dict,
-                         version: int,
+                         version: Optional[int],
                          time_extracted: datetime.datetime) -> singer.RecordMessage:
     """
     Transforms row to singer record message
