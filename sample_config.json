@@ -3,7 +3,8 @@
   "user": "<username>",
   "host": "<host ip address>",
   "port": "<port>",
-  "database": "<database name>",
+  "auth_database": "<database to authenticate on>",
+  "database": "<collection database name>",
   "replica_set": "<replicaSet name if exist, null otherwise>",
   "verify_mode": "<SSL verify mode | optional, default 'true'>",
   "ssl": "<enable SSL | optional>"

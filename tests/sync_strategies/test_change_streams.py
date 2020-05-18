@@ -1,9 +1,10 @@
 import unittest
 import bson
 
-from unittest.mock import patch, Mock, PropertyMock
+from unittest.mock import patch, Mock, PropertyMock, MagicMock
 from pymongo.change_stream import CollectionChangeStream, ChangeStream
 from pymongo.collection import Collection
+from pymongo.database import Database
 from singer import RecordMessage
 
 import tap_mongodb.sync_strategies.change_streams as change_streams
@@ -20,21 +21,24 @@ class TestChangeStreams(unittest.TestCase):
         state = {
             'bookmarks': {
                 'stream1': {},
-                'stream2': {}
+                'stream2': {},
+                'stream3': {},
             }
         }
 
-        new_state = change_streams.update_bookmarks(state, 'stream1', {'data': 'this is a token'})
+        token = {'data': 'this is a token'}
+
+        new_state = change_streams.update_bookmarks(state, {'stream1', 'stream2'}, token)
 
         self.assertEqual({
             'bookmarks': {
-                'stream1': {'token': {'data': 'this is a token'}},
-                'stream2': {}
+                'stream1': {'token': token},
+                'stream2': {'token': token},
+                'stream3': {}
             }
         }, new_state)
 
     def test_get_buffer_rows_from_db(self):
-
         result = ['a', 'b', 'c']
 
         mock_enter = Mock()
@@ -49,79 +53,139 @@ class TestChangeStreams(unittest.TestCase):
 
         self.assertListEqual(
             result,
-            list(change_streams.get_buffer_rows_from_db(mock_coll, {1,2,3}, None)))
+            list(change_streams.get_buffer_rows_from_db(mock_coll, {1, 2, 3})))
 
         mock_enter.assert_called_once()
 
     @patch('tap_mongodb.sync_strategies.change_streams.singer.write_message')
-    @patch('tap_mongodb.sync_strategies.change_streams.flush_buffer')
-    def test_sync_collection(self, flush_buffer_mock, write_message_mock):
+    @patch('tap_mongodb.sync_strategies.change_streams.get_buffer_rows_from_db')
+    def test_sync_database(self, get_buffer_rows_from_db_mock, write_message_mock):
         common.SCHEMA_COUNT['mydb-stream1'] = 0
+        common.SCHEMA_COUNT['mydb-stream2'] = 0
+        common.SCHEMA_COUNT['mydb-stream3'] = 0
+
         common.SCHEMA_TIMES['mydb-stream1'] = 0
+        common.SCHEMA_TIMES['mydb-stream2'] = 0
+        common.SCHEMA_TIMES['mydb-stream3'] = 0
+
         common.COUNTS['mydb-stream1'] = 0
+        common.COUNTS['mydb-stream2'] = 0
+        common.COUNTS['mydb-stream3'] = 0
+
+        common.TIMES['mydb-stream1'] = 0
+        common.TIMES['mydb-stream2'] = 0
+        common.TIMES['mydb-stream3'] = 0
 
         messages = []
 
-        flush_buffer_mock.side_effect = [1]
-        write_message_mock.side_effect = lambda x: messages.append(x)
+        get_buffer_rows_from_db_mock.return_value = [
+            {
+                '_id': 'id13',
+                'key2': 'eeeeef',
+            }
+        ]
+        write_message_mock.side_effect = messages.append
 
         state = {
             'bookmarks': {
-                'mydb-stream1': {}
+                'mydb-stream1': {},
+                'mydb-stream2': {},
+                'mydb-stream3': {},
             }
         }
 
-        stream = {
-            'tap_stream_id': 'mydb-stream1',
-            'stream': 'stream1',
-            'metadata': [
-                {
-                    'breadcrumb': [],
-                    'metadata': {
-                        'database-name': 'mydb'
+        streams = {
+            'mydb-stream1': {
+                'tap_stream_id': 'mydb-stream1',
+                'table_name': 'stream1',
+                'stream': 'stream1',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
                     }
-                }
-            ]
+                ]
+            },
+            'mydb-stream2': {
+                'tap_stream_id': 'mydb-stream2',
+                'table_name': 'stream2',
+                'stream': 'stream2',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
+                    }
+                ]
+            }, 'mydb-stream3': {
+                'tap_stream_id': 'mydb-stream3',
+                'table_name': 'stream3',
+                'stream': 'stream3',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
+                    }
+                ]
+            }
         }
 
-        change_mock1 = Mock(spec_set=ChangeStream, return_value={
-            'operationType': 'insert',
-            'fullDocument': {
-                '_id': 'id1',
-                'key1': 1,
-                'key2': 'abc'
-            }
-        }).return_value
+        changes = [
+            Mock(spec_set=ChangeStream, return_value={
+                'operationType': 'insert',
+                'ns': {'db': 'mydb', 'coll': 'stream1'},
+                'fullDocument': {
+                    '_id': 'id11',
+                    'key1': 1,
+                    'key2': 'abc'
+                }
+            }).return_value,
+            Mock(spec_set=ChangeStream, return_value={
+                'operationType': 'update',
+                'ns': {'db': 'mydb', 'coll': 'stream1'},
+                'documentKey': {
+                    '_id': 'id12'
+                }
 
-        change_mock2 = Mock(spec_set=ChangeStream, return_value={
-            'operationType': 'update',
-            'documentKey': {
-                '_id': 'id2'
-            }
-
-        }).return_value
-
-        change_mock3 = Mock(spec_set=ChangeStream, return_value={
-            'operationType': 'delete',
-            'documentKey': {
-                '_id': 'id3'
-            },
-            'clusterTime': bson.timestamp.Timestamp(1588636800, 0) # datetime.datetime(2020, 5, 5, 3, 0, 0,0)
-        }).return_value
-
-        change_mock4 = Mock(spec_set=ChangeStream, return_value={
-            'operationType': 'insert',
-            'fullDocument': {
-                '_id': 'id4',
-                'key3': bson.timestamp.Timestamp(1588636800, 0),
-            }
-        }).return_value
-
+            }).return_value,
+            Mock(spec_set=ChangeStream, return_value={
+                'operationType': 'insert',
+                'ns': {'db': 'mydb', 'coll': 'stream2'},
+                'fullDocument': {
+                    '_id': 'id21',
+                    'key6': 12,
+                    'key10': 'abc'
+                }
+            }).return_value,
+            Mock(spec_set=ChangeStream, return_value={
+                'operationType': 'delete',
+                'ns': {'db': 'mydb', 'coll': 'stream2'},
+                'documentKey': {
+                    '_id': 'id22'
+                },
+                'clusterTime': bson.timestamp.Timestamp(1588636800, 0)  # datetime.datetime(2020, 5, 5, 3, 0, 0,0)
+            }).return_value,
+            Mock(spec_set=ChangeStream, return_value={
+                'operationType': 'insert',
+                'ns': {'db': 'mydb', 'coll': 'stream1'},
+                'fullDocument': {
+                    '_id': 'id13',
+                    'key3': bson.timestamp.Timestamp(1588636800, 0),
+                }
+            }).return_value,
+            None
+        ]
 
         cursor_mock = Mock(spec_set=CollectionChangeStream).return_value
         type(cursor_mock).alive = PropertyMock(return_value=True)
-        type(cursor_mock).resume_token = PropertyMock(side_effect=['token1','token2','token3','token4', 'token5'])
-        cursor_mock.try_next.side_effect = [change_mock1, change_mock2, change_mock3, change_mock4, None]
+        type(cursor_mock).resume_token = PropertyMock(side_effect=['token1', 'token2', 'token3', 'token4',
+                                                                   'token5', 'token6'])
+        cursor_mock.try_next.side_effect = changes
 
         mock_enter = Mock()
         mock_enter.return_value = cursor_mock
@@ -130,41 +194,58 @@ class TestChangeStreams(unittest.TestCase):
         mock_watch.__enter__ = mock_enter
         mock_watch.__exit__ = Mock()
 
-        mock_coll = Mock(spec_set=Collection).return_value
-        mock_coll.watch.return_value = mock_watch
+        mock_db = MagicMock(spec_set=Database).return_value
+        mock_db.watch.return_value = mock_watch
+        type(mock_db).name = PropertyMock(return_value='mydb')
 
-        change_streams.sync_collection(mock_coll, stream, state, None)
+        change_streams.sync_database(mock_db, streams, state)
 
         self.assertEqual({
             'bookmarks': {
                 'mydb-stream1': {
-                    'token': 'token5',
-                }
+                    'token': 'token6',
+                },
+                'mydb-stream2': {
+                    'token': 'token6',
+                },
+                'mydb-stream3': {
+                    'token': 'token6',
+                },
             }
         }, state)
 
         self.assertListEqual([
-            'ActivateVersionMessage',
-            'RecordMessage',
-            'RecordMessage',
+            'RecordMessage',  # insert
+            'RecordMessage',  # insert
+            'RecordMessage',  # delete
             'SchemaMessage',
-            'RecordMessage',
+            'RecordMessage',  # insert
             'StateMessage',
+            'RecordMessage',  # update
         ], [msg.__class__.__name__ for msg in messages])
 
         self.assertListEqual([
-            {'_id': 'id1', 'key1': 1, 'key2': 'abc'},
-            {'_id': 'id3', '_sdc_deleted_at': '2020-05-05T00:00:00+00:00'},
-            {'_id': 'id4', 'key3': '2020-05-05T00:00:00.000000Z'},
+            {'_id': 'id11', 'key1': 1, 'key2': 'abc'},
+            {'_id': 'id21', 'key6': 12, 'key10': 'abc'},
+            {'_id': 'id22', '_sdc_deleted_at': '2020-05-05T00:00:00+00:00'},
+            {'_id': 'id13', 'key3': '2020-05-05T00:00:00.000000Z'},
+            {'_id': 'id13', 'key2': 'eeeeef', },
         ], [msg.record for msg in messages if isinstance(msg, RecordMessage)])
 
-        self.assertEqual(common.COUNTS['mydb-stream1'], 4)
+        self.assertEqual(common.COUNTS['mydb-stream1'], 3)
+        self.assertEqual(common.COUNTS['mydb-stream2'], 2)
+        self.assertEqual(common.COUNTS['mydb-stream3'], 0)
 
     @patch('tap_mongodb.sync_strategies.change_streams.singer.write_message')
     @patch('tap_mongodb.sync_strategies.change_streams.get_buffer_rows_from_db')
     def test_flush_buffer_with_3_rows_returns_3(self, get_rows_mock, write_message_mock):
         common.SCHEMA_COUNT['mydb-stream1'] = 0
+        common.SCHEMA_COUNT['mydb-stream2'] = 0
+        common.SCHEMA_COUNT['mydb-stream3'] = 0
+
         common.SCHEMA_TIMES['mydb-stream1'] = 0
+        common.SCHEMA_TIMES['mydb-stream2'] = 0
+        common.SCHEMA_TIMES['mydb-stream3'] = 0
 
         get_rows_mock.return_value = [
             {'_id': '1', 'key1': 1},
@@ -172,30 +253,81 @@ class TestChangeStreams(unittest.TestCase):
             {'_id': '3', 'key3': bson.timestamp.Timestamp(1588636800, 0)},
         ]
 
-        buffer = {'1', '2', '3', '4'}
-        schema = {'type': 'object', 'properties': {}}
-
-        stream = {
-            'tap_stream_id': 'mydb-stream1',
-            'stream': 'stream1',
-            'metadata': [
-                {
-                    'breadcrumb': [],
-                    'metadata': {
-                        'database-name': 'mydb'
-                    }
-                }
-            ]
+        buffer = {
+            'mydb-stream1': {'1', '2', '3', '4'},
+            'mydb-stream2': None,
+            'mydb-stream3': {},
         }
 
+        schemas = {
+            'mydb-stream1': {'type': 'object', 'properties': {}},
+            'mydb-stream2': {'type': 'object', 'properties': {}},
+            'mydb-stream3': {'type': 'object', 'properties': {}},
+        }
+
+        streams = {
+            'mydb-stream1': {
+                'table_name': 'stream1',
+                'tap_stream_id': 'mydb-stream1',
+                'stream': 'stream1',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
+                    }
+                ]
+            },
+            'mydb-stream2': {
+                'table_name': 'stream2',
+                'tap_stream_id': 'mydb-stream2',
+                'stream': 'stream1',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
+                    }
+                ]
+            },
+            'mydb-stream3': {
+                'table_name': 'stream3',
+                'tap_stream_id': 'mydb-stream3',
+                'stream': 'stream1',
+                'metadata': [
+                    {
+                        'breadcrumb': [],
+                        'metadata': {
+                            'database-name': 'mydb'
+                        }
+                    }
+                ]
+            }
+        }
         messages = []
+        rows_saved = {
+            'mydb-stream1': 0,
+            'mydb-stream2': 0,
+            'mydb-stream3': 0,
+        }
 
-        write_message_mock.side_effect = lambda x: messages.append(x)
+        write_message_mock.side_effect = messages.append
 
-        rows_saved = change_streams.flush_buffer(buffer, stream, Mock(spec_set=Collection),
-                                                 None, 0, schema)
+        change_streams.flush_buffer(buffer, streams,
+                                    Mock(spec_set=Database, return_value={
+                                        'stream1': Mock(),
+                                        'stream2': Mock(),
+                                        'stream3': Mock(),
+                                    }).return_value,
+                                    None,
+                                    schemas,
+                                    rows_saved)
 
-        self.assertEqual(3, rows_saved)
+        self.assertEqual(3, rows_saved['mydb-stream1'])
+        self.assertEqual(0, rows_saved['mydb-stream2'])
+        self.assertEqual(0, rows_saved['mydb-stream3'])
 
         self.assertListEqual([
             'RecordMessage',
@@ -204,4 +336,6 @@ class TestChangeStreams(unittest.TestCase):
             'RecordMessage',
         ], [m.__class__.__name__ for m in messages])
 
-        self.assertFalse(buffer)
+        self.assertFalse(buffer['mydb-stream1'])
+        self.assertFalse(buffer['mydb-stream2'])
+        self.assertFalse(buffer['mydb-stream3'])

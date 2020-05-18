@@ -43,7 +43,6 @@ def update_bookmark(row: Dict, state: Dict, tap_stream_id: str, replication_key_
 def sync_collection(collection: Collection,
                     stream: Dict,
                     state: Optional[Dict],
-                    projection: Optional[str]
                     ) -> None:
     """
     Syncs the stream records incrementally
@@ -51,7 +50,6 @@ def sync_collection(collection: Collection,
         collection: MongoDB collection instance
         stream: stream dictionary
         state: state dictionary if exists
-        projection: projection for querying if exists
     """
     LOGGER.info('Starting incremental sync for %s', stream['tap_stream_id'])
 
@@ -96,13 +94,12 @@ def sync_collection(collection: Collection,
                                                                            stream_state.get('replication_key_type'))
 
     # log query
-    LOGGER.info('Querying %s with: %s', stream['tap_stream_id'], dict(find=find_filter, projection=projection))
+    LOGGER.info('Querying %s with: %s', stream['tap_stream_id'], dict(find=find_filter))
 
     # query collection
     schema = {"type": "object", "properties": {}}
 
     with collection.find(find_filter,
-                         projection,
                          sort=[(replication_key_name, pymongo.ASCENDING)]) as cursor:
         rows_saved = 0
         start_time = time.time()
