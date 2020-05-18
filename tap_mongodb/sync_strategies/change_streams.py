@@ -118,7 +118,7 @@ def sync_database(database: Database,
             # After MAX_AWAIT_TIME_MS has elapsed, the cursor will return None.
             # write state and exit
             if change is None:
-                LOGGER.debug('No change streams after % s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
+                LOGGER.debug('No change streams after %s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
 
                 state = update_bookmarks(state, stream_ids, resume_token)
                 singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
