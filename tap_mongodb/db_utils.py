@@ -187,6 +187,7 @@ def produce_collection_schema(collection: Collection) -> Dict:
         'metadata': metadata.to_list(mdata),
         'tap_stream_id': "{}-{}".format(collection_db_name, collection_name),
         'schema': {
-            'type': 'object'
+            'type': 'object',
+            'properties': {}
         }
     }
