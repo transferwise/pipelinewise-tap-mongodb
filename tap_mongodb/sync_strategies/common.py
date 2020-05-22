@@ -3,20 +3,19 @@ import base64
 import datetime
 import time
 import uuid
-import decimal
-
 import bson
 import singer
 import pytz
 import tzlocal
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from bson import objectid, timestamp, datetime as bson_datetime
 from singer import utils, metadata
 from terminaltables import AsciiTable
 
 from tap_mongodb.errors import MongoInvalidDateTimeException, SyncException, UnsupportedKeyTypeException
 
+SDC_DELETED_AT = "_sdc_deleted_at"
 INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = False
 UPDATE_BOOKMARK_PERIOD = 1000
 COUNTS = {}
@@ -193,7 +192,7 @@ def transform_value(value: Any, path) -> Any:
         bson.decimal128.Decimal128: lambda val, _: val.to_decimal(),
         bson.regex.Regex: lambda val, _: dict(pattern=val.pattern, flags=val.flags),
         bson.code.Code: lambda val, _: dict(value=str(val), scope=str(val.scope)) if val.scope else str(val),
-        bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database)
+        bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database),
     }
 
     if type(value) in conversion:
@@ -204,11 +203,14 @@ def transform_value(value: Any, path) -> Any:
 
 def row_to_singer_record(stream: Dict,
                          row: Dict,
-                         version: Optional[int],
-                         time_extracted: datetime.datetime) -> singer.RecordMessage:
+                         time_extracted: datetime.datetime,
+                         time_deleted: Optional[datetime.datetime],
+                         version: Optional[int] = None,
+                         ) -> singer.RecordMessage:
     """
     Transforms row to singer record message
     Args:
+        time_deleted: Datetime when row got deleted
         stream: stream details
         row: DB row
         version: stream version
@@ -217,12 +219,22 @@ def row_to_singer_record(stream: Dict,
     Returns: Singer RecordMessage instance
 
     """
+
+    if version is None:
+        version = int(time.time() * 1000)
+
     try:
         row_to_persist = {k: transform_value(v, [k]) for k, v in row.items()
                           if type(v) not in [bson.min_key.MinKey, bson.max_key.MaxKey]}
     except MongoInvalidDateTimeException as ex:
         raise SyncException(
             "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex))
+
+    row_to_persist = {
+        '_id': row_to_persist['_id'],
+        'document': row_to_persist,
+        SDC_DELETED_AT: utils.strftime(time_deleted) if time_deleted else None
+    }
 
     return singer.RecordMessage(
         stream=calculate_destination_stream_name(stream),
