@@ -188,6 +188,24 @@ def produce_collection_schema(collection: Collection) -> Dict:
         'tap_stream_id': "{}-{}".format(collection_db_name, collection_name),
         'schema': {
             'type': 'object',
-            'properties': {}
+            'properties': {
+                "_id": {
+                    "type": ["string", "null"]
+                },
+                "document": {
+                    "type": [
+                        "object",
+                        "array",
+                        "string",
+                        "null"
+                    ]
+                },
+                "_sdc_deleted_at": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+            },
         }
     }
