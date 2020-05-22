@@ -34,7 +34,7 @@ def calculate_destination_stream_name(stream: Dict) -> str:
     """
     s_md = metadata.to_map(stream['metadata'])
     if INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME:
-        return "{}_{}".format(s_md.get((), {}).get('database-name'), stream['stream'])
+        return "{}-{}".format(s_md.get((), {}).get('database-name'), stream['stream'])
 
     return stream['stream']
 

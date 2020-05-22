@@ -33,7 +33,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
         }
         with patch('tap_mongodb.common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME') as constant_mock:
             constant_mock.return_value = True
-            self.assertEqual('myDb_myStream', common.calculate_destination_stream_name(stream))
+            self.assertEqual('myDb-myStream', common.calculate_destination_stream_name(stream))
 
     def test_calculate_destination_stream_name_with_include_schema_False(self):
         """
