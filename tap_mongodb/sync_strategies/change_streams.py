@@ -53,7 +53,7 @@ def get_buffer_rows_from_db(collection: Collection,
 
 def get_token_from_state(streams_to_sync: Set[str], state: Dict) -> Optional[Dict]:
     """
-    Extract the first non null resume token, provided all the logbased streams have the same token
+    Extract the smallest non null resume token
     Args:
         streams_to_sync: set of log based streams
         state: state dictionary
@@ -61,10 +61,12 @@ def get_token_from_state(streams_to_sync: Set[str], state: Dict) -> Optional[Dic
     Returns: resume token if found, None otherwise
 
     """
-    return next((stream_state[RESUME_TOKEN_KEY]
-                 for stream_name, stream_state in state.get('bookmarks', {}).items()
-                 if stream_name in streams_to_sync
-                 and stream_state.get(RESUME_TOKEN_KEY) is not None), None)
+    token_sorted = sorted([stream_state[RESUME_TOKEN_KEY]
+                           for stream_name, stream_state in state.get('bookmarks', {}).items()
+                           if stream_name in streams_to_sync and stream_state.get(RESUME_TOKEN_KEY) is not None],
+                          key=lambda key: key['_data'])
+
+    return token_sorted[0] if token_sorted else None
 
 
 def sync_database(database: Database,
@@ -118,7 +120,7 @@ def sync_database(database: Database,
             # After MAX_AWAIT_TIME_MS has elapsed, the cursor will return None.
             # write state and exit
             if change is None:
-                LOGGER.debug('No change streams after %s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
+                LOGGER.info('No change streams after %s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
 
                 state = update_bookmarks(state, stream_ids, resume_token)
                 singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
