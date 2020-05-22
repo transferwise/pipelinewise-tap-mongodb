@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-MONGDB_HOST="0.0.0.0"
+# Local DB host, dev and test purposes only
+MONGDB_HOST="0.0.0.0" 
 MONGDB_PORT=27017
 TRY_LOOP=3
 

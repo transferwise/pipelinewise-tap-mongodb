@@ -10,7 +10,7 @@ import singer
 import pytz
 import tzlocal
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from bson import objectid, timestamp, datetime as bson_datetime
 from singer import utils, metadata
 from terminaltables import AsciiTable
@@ -76,7 +76,7 @@ def get_stream_version(tap_stream_id: str, state: Dict) -> int:
     return stream_version
 
 
-def class_to_string(key_value: Any, key_type: str) -> Any:
+def class_to_string(key_value: Any, key_type: str) -> str:
     """
     Converts specific types to string equivalent
     The supported types are: datetime, bson Timestamp, bytes, int, Int64, float, ObjectId, str and UUID
@@ -126,7 +126,7 @@ def string_to_class(str_value: str, type_value: str) -> Any:
         'float': str,
         'ObjectId': objectid.ObjectId,
         'Timestamp': lambda val: (lambda split_value=val.split('.'):
-                                  bson.timestamp.Timestamp(int(split_value[0]), int(split_value[1]))),
+                                  bson.timestamp.Timestamp(int(split_value[0]), int(split_value[1])))(),
         'bytes': lambda val: base64.b64decode(val.encode()),
         'str': str,
     }
@@ -134,8 +134,7 @@ def string_to_class(str_value: str, type_value: str) -> Any:
     if type_value in conversion:
         return conversion[type_value](str_value)
 
-    raise UnsupportedKeyTypeException("{} is not a supported key type"
-                                      .format(type_value))
+    raise UnsupportedKeyTypeException(f"{type_value} is not a supported key type")
 
 
 def safe_transform_datetime(value: datetime.datetime, path):
@@ -184,25 +183,18 @@ def transform_value(value: Any, path) -> Any:
     conversion = {
         list: lambda val, pat: list(map(lambda v: transform_value(v[1], pat + [v[0]]), enumerate(val))),
         dict: lambda val, pat: {k: transform_value(v, pat + [k]) for k, v in val.items()},
-        uuid.UUID: str,
-        objectid.ObjectId: str,
+        uuid.UUID: lambda val, _: class_to_string(val, 'UUID'),
+        objectid.ObjectId: lambda val, _: class_to_string(val, 'ObjectId'),
         bson_datetime.datetime: safe_transform_datetime,
         timestamp.Timestamp: lambda val, _: utils.strftime(val.as_datetime()),
-        bson.int64.Int64: lambda val, _: int(val),
-        bytes: lambda val, _: base64.b64encode(val).decode('utf-8'),
-        datetime.datetime: lambda val, _: utils.strftime(val),
+        bson.int64.Int64: lambda val, _: class_to_string(val, 'Int64'),
+        bytes: lambda val, _: class_to_string(val, 'bytes'),
+        datetime.datetime: lambda val, _: class_to_string(val, 'datetime'),
         bson.decimal128.Decimal128: lambda val, _: val.to_decimal(),
         bson.regex.Regex: lambda val, _: dict(pattern=val.pattern, flags=val.flags),
         bson.code.Code: lambda val, _: dict(value=str(val), scope=str(val.scope)) if val.scope else str(val),
         bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database)
-
-
     }
-
-    if isinstance(value, datetime.datetime):
-        timezone = tzlocal.get_localzone()
-        local_datetime = timezone.localize(value)
-        value = local_datetime.astimezone(pytz.UTC)
 
     if type(value) in conversion:
         return conversion[type(value)](value, path)
@@ -212,7 +204,7 @@ def transform_value(value: Any, path) -> Any:
 
 def row_to_singer_record(stream: Dict,
                          row: Dict,
-                         version: int,
+                         version: Optional[int],
                          time_extracted: datetime.datetime) -> singer.RecordMessage:
     """
     Transforms row to singer record message
