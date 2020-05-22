@@ -3,44 +3,25 @@ import base64
 import datetime
 import time
 import uuid
-import decimal
-
 import bson
 import singer
 import pytz
 import tzlocal
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from bson import objectid, timestamp, datetime as bson_datetime
 from singer import utils, metadata
 from terminaltables import AsciiTable
 
 from tap_mongodb.errors import MongoInvalidDateTimeException, SyncException, UnsupportedKeyTypeException
 
+SDC_DELETED_AT = "_sdc_deleted_at"
 INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = False
 UPDATE_BOOKMARK_PERIOD = 1000
 COUNTS = {}
 TIMES = {}
 SCHEMA_COUNT = {}
 SCHEMA_TIMES = {}
-
-
-def write_schema(schema: Dict, row: Dict, stream: Dict) -> None:
-    """
-    Checks if the row and schema don't match and updates the latter accordingly, then write a singer schema message
-    Args:
-        schema: Json schema dictionary
-        row: row from DB
-        stream: dictionary with stream details
-    """
-    schema_build_start_time = time.time()
-    if update_schema_from_row(schema, row):
-        singer.write_message(singer.SchemaMessage(
-            stream=calculate_destination_stream_name(stream),
-            schema=schema,
-            key_properties=['_id']))
-        SCHEMA_COUNT[stream['tap_stream_id']] += 1
-    SCHEMA_TIMES[stream['tap_stream_id']] += time.time() - schema_build_start_time
 
 
 def calculate_destination_stream_name(stream: Dict) -> str:
@@ -53,7 +34,7 @@ def calculate_destination_stream_name(stream: Dict) -> str:
     """
     s_md = metadata.to_map(stream['metadata'])
     if INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME:
-        return "{}_{}".format(s_md.get((), {}).get('database-name'), stream['stream'])
+        return "{}-{}".format(s_md.get((), {}).get('database-name'), stream['stream'])
 
     return stream['stream']
 
@@ -193,7 +174,7 @@ def transform_value(value: Any, path) -> Any:
         bson.decimal128.Decimal128: lambda val, _: val.to_decimal(),
         bson.regex.Regex: lambda val, _: dict(pattern=val.pattern, flags=val.flags),
         bson.code.Code: lambda val, _: dict(value=str(val), scope=str(val.scope)) if val.scope else str(val),
-        bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database)
+        bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database),
     }
 
     if type(value) in conversion:
@@ -204,11 +185,14 @@ def transform_value(value: Any, path) -> Any:
 
 def row_to_singer_record(stream: Dict,
                          row: Dict,
-                         version: Optional[int],
-                         time_extracted: datetime.datetime) -> singer.RecordMessage:
+                         time_extracted: datetime.datetime,
+                         time_deleted: Optional[datetime.datetime],
+                         version: Optional[int] = None,
+                         ) -> singer.RecordMessage:
     """
     Transforms row to singer record message
     Args:
+        time_deleted: Datetime when row got deleted
         stream: stream details
         row: DB row
         version: stream version
@@ -217,6 +201,10 @@ def row_to_singer_record(stream: Dict,
     Returns: Singer RecordMessage instance
 
     """
+
+    if version is None:
+        version = int(time.time() * 1000)
+
     try:
         row_to_persist = {k: transform_value(v, [k]) for k, v in row.items()
                           if type(v) not in [bson.min_key.MinKey, bson.max_key.MaxKey]}
@@ -224,218 +212,17 @@ def row_to_singer_record(stream: Dict,
         raise SyncException(
             "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex))
 
+    row_to_persist = {
+        '_id': row_to_persist['_id'],
+        'document': row_to_persist,
+        SDC_DELETED_AT: utils.strftime(time_deleted) if time_deleted else None
+    }
+
     return singer.RecordMessage(
         stream=calculate_destination_stream_name(stream),
         record=row_to_persist,
         version=version,
         time_extracted=time_extracted)
-
-
-def _add_to_any_of_for_datetime_types(schema: List) -> bool:
-    """
-    Add date-time type to schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-    has_date = False
-    for field_schema_entry in schema:
-        if field_schema_entry.get('format') == 'date-time':
-            has_date = True
-            break
-
-    if not has_date:
-        schema.insert(0, {"type": "string", "format": "date-time"})
-        return True
-
-    return False
-
-
-def _add_to_any_of_for_decimal_types(schema: List) -> bool:
-    """
-    Add number type to schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-    has_date = False
-    has_decimal = False
-
-    for field_schema_entry in schema:
-        if field_schema_entry.get('format') == 'date-time':
-            has_date = True
-
-        if field_schema_entry.get('type') == 'number' and not field_schema_entry.get('multipleOf'):
-            field_schema_entry['multipleOf'] = decimal.Decimal('1e-34')
-            return True
-
-        if field_schema_entry.get('type') == 'number' and field_schema_entry.get('multipleOf'):
-            has_decimal = True
-
-    if not has_decimal:
-        if has_date:
-            schema.insert(1, {"type": "number", "multipleOf": decimal.Decimal('1e-34')})
-        else:
-            schema.insert(0, {"type": "number", "multipleOf": decimal.Decimal('1e-34')})
-        return True
-
-    return False
-
-
-def _add_to_any_of_for_float_types(schema: List) -> bool:
-    """
-    Add number type to schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-
-    has_date = False
-    has_float = False
-
-    for field_schema_entry in schema:
-        if field_schema_entry.get('format') == 'date-time':
-            has_date = True
-        if field_schema_entry.get('type') == 'number' and field_schema_entry.get('multipleOf'):
-            field_schema_entry.pop('multipleOf')
-            return True
-        if field_schema_entry.get('type') == 'number' and not field_schema_entry.get('multipleOf'):
-            has_float = True
-
-    if not has_float:
-        if has_date:
-            schema.insert(1, {"type": "number"})
-        else:
-            schema.insert(0, {"type": "number"})
-        return True
-
-    return False
-
-
-def _add_to_any_of_for_dict_type(schema: List, value: Dict) -> bool:
-    """
-    Add object type and subsequent changes to schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-    has_object = False
-
-    # get pointer to object schema and see if it already existed
-    object_schema = {"type": "object", "properties": {}}
-    for field_schema_entry in schema:
-        if field_schema_entry.get('type') == 'object':
-            object_schema = field_schema_entry
-            has_object = True
-
-    # see if object schema changed
-    if update_schema_from_row(object_schema, value):
-        # if it changed and existed, it's reference was modified
-        # if it changed and didn't exist, insert it
-        if not has_object:
-            schema.insert(-1, object_schema)
-
-        return True
-
-    return False
-
-
-def _add_to_any_of_for_list_type(schema: List, value: List) -> bool:
-    """
-    Add array type to schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-    has_list = False
-
-    # get pointer to list's anyOf schema and see if list schema already existed
-    list_schema = {"type": "array", "items": {"anyOf": [{}]}}
-    for field_schema_entry in schema:
-        if field_schema_entry.get('type') == 'array':
-            list_schema = field_schema_entry
-            has_list = True
-    anyof_schema = list_schema['items']['anyOf']
-
-    # see if list schema changed
-    list_entry_changed = False
-    for list_entry in value:
-        list_entry_changed = add_to_any_of(anyof_schema, list_entry) or list_entry_changed
-
-    # if it changed and existed, it's reference was modified
-    # if it changed and didn't exist, insert it
-    if not has_list and list_entry_changed:
-        schema.insert(-1, list_schema)
-
-    return list_entry_changed
-
-
-def add_to_any_of(schema: List, value: Any)-> bool:
-    """
-    Update types in to anyOf schema when applicable
-    Args:
-        schema: anyOf schema
-
-    Returns: True if schema has changed, False otherwise
-
-    """
-    if isinstance(value, (bson_datetime.datetime, timestamp.Timestamp, datetime.datetime)):
-        return _add_to_any_of_for_datetime_types(schema)
-
-    if isinstance(value, bson.decimal128.Decimal128):
-        return _add_to_any_of_for_decimal_types(schema)
-
-    if isinstance(value, float):
-        return _add_to_any_of_for_float_types(schema)
-
-    if isinstance(value, dict):
-        return _add_to_any_of_for_dict_type(schema, value)
-
-    if isinstance(value, list):
-        return _add_to_any_of_for_list_type(schema, value)
-
-    return False
-
-
-def update_schema_from_row(schema: Dict, row: Dict)->bool:
-    """
-    Updates json schema if needed depending on the row structure
-    Args:
-        schema: schema to update
-        row: row to use
-
-    Returns: True if schema has been updated, False otherwise
-
-    """
-    changed = False
-    for field, value in row.items():
-        if isinstance(value, (bson_datetime.datetime,
-                              timestamp.Timestamp,
-                              datetime.datetime,
-                              bson.decimal128.Decimal128,
-                              float,
-                              dict,
-                              list)):
-
-            # get pointer to field's anyOf list
-            if not schema.get('properties', {}).get(field):
-                schema['properties'][field] = {'anyOf': [{}]}
-            anyof_schema = schema['properties'][field]['anyOf']
-
-            # add value's schema to anyOf list
-            changed = add_to_any_of(anyof_schema, value) or changed
-
-    return changed
 
 
 def get_sync_summary(catalog)->str:

@@ -103,10 +103,10 @@ ENV/
 # Emacs
 .tramp_history
 
-config.json
-state.json
-properties.json
-catalog.json
+config*.json
+state*.json
+properties*.json
+catalog*.json
 
 # Jetbrains .idea
 .idea
