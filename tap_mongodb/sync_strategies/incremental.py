@@ -103,11 +103,11 @@ def sync_collection(collection: Collection,
 
         for row in cursor:
 
-            singer.write_message(common.row_to_singer_record(stream,
-                                                             row,
-                                                             stream_version,
-                                                             utils.now(),
-                                                             None))
+            singer.write_message(common.row_to_singer_record(stream=stream,
+                                                             row=row,
+                                                             time_extracted=utils.now(),
+                                                             time_deleted=None,
+                                                             version=stream_version))
             rows_saved += 1
 
             update_bookmark(row, state, stream['tap_stream_id'], replication_key_name)

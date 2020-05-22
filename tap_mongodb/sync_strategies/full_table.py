@@ -105,11 +105,11 @@ def sync_collection(collection: Collection, stream: Dict, state: Dict) -> None:
         for row in cursor:
             rows_saved += 1
 
-            singer.write_message(common.row_to_singer_record(stream,
-                                                             row,
-                                                             stream_version,
-                                                             utils.now(),
-                                                             None))
+            singer.write_message(common.row_to_singer_record(stream=stream,
+                                                             row=row,
+                                                             time_extracted=utils.now(),
+                                                             time_deleted=None,
+                                                             version=stream_version))
 
             state = singer.write_bookmark(state,
                                           stream['tap_stream_id'],
