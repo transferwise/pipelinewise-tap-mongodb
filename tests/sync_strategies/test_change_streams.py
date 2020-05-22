@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime
+
 import bson
 
 from unittest.mock import patch, Mock, PropertyMock, MagicMock
@@ -57,6 +59,72 @@ class TestChangeStreams(unittest.TestCase):
 
         mock_enter.assert_called_once()
 
+    def test_token_from_state_with_no_tokens_in_state_expect_none(self):
+        state = {
+            'bookmarks': {
+                'mydb-stream1': {
+                },
+                'mydb-stream2': {
+                },
+                'mydb-stream3': {
+                },
+            }
+        }
+
+        self.assertIsNone(change_streams.get_token_from_state({'mydb-stream1','mydb-stream2','mydb-stream3'}, state))
+
+    def test_token_from_state_with_streams_to_sync_expect_None(self):
+        state = {
+            'bookmarks': {
+                'mydb-stream1': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080005'}
+                },
+                'mydb-stream2': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1090004'}
+                },
+                'mydb-stream3': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E10A0006'}
+                },
+            }
+        }
+
+        self.assertIsNone(change_streams.get_token_from_state(set([]), state))
+
+    def test_token_from_state_with_state_and_streams_to_sync(self):
+        state = {
+            'bookmarks': {
+                'mydb-stream1': {
+                    'token':
+                        {
+                            '_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080005'}
+                },
+                'mydb-stream2': {
+                    'token':
+                        {
+                            '_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080004'}
+                },
+                'mydb-stream3': {
+                    'token':
+                        {
+                            '_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080006'}
+                },
+                'mydb-stream4': {
+                    'token':
+                        {
+                            '_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080001'}
+                },
+                'mydb-stream5': {
+                    'token':None
+                },
+            }
+        }
+
+        self.assertEqual({'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080004'},
+        change_streams.get_token_from_state({'mydb-stream1','mydb-stream2','mydb-stream3','mydb-stream5'}, state))
+
     @patch('tap_mongodb.sync_strategies.change_streams.singer.write_message')
     @patch('tap_mongodb.sync_strategies.change_streams.get_buffer_rows_from_db')
     def test_sync_database(self, get_buffer_rows_from_db_mock, write_message_mock):
@@ -88,9 +156,25 @@ class TestChangeStreams(unittest.TestCase):
 
         state = {
             'bookmarks': {
-                'mydb-stream1': {},
-                'mydb-stream2': {},
-                'mydb-stream3': {},
+                'mydb-stream1': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080005'}
+                },
+                'mydb-stream2': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080004'}
+                },
+                'mydb-stream3': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080006'}
+                },
+                'mydb-stream4': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080001'}
+                },
+                'mydb-stream5': {
+                    'token': None
+                },
             }
         }
 
@@ -142,7 +226,8 @@ class TestChangeStreams(unittest.TestCase):
                 'fullDocument': {
                     '_id': 'id11',
                     'key1': 1,
-                    'key2': 'abc'
+                    'key2': 'abc',
+                    'key3': {'a': 1, 'b': datetime(2020, 4, 10, 14, 50, 55, 0)}
                 }
             }).return_value,
             Mock(spec_set=ChangeStream, return_value={
@@ -159,7 +244,8 @@ class TestChangeStreams(unittest.TestCase):
                 'fullDocument': {
                     '_id': 'id21',
                     'key6': 12,
-                    'key10': 'abc'
+                    'key10': 'abc',
+                    'key11': [1,2,3, bson.int64.Int64(10)]
                 }
             }).return_value,
             Mock(spec_set=ChangeStream, return_value={
@@ -168,7 +254,7 @@ class TestChangeStreams(unittest.TestCase):
                 'documentKey': {
                     '_id': 'id22'
                 },
-                'clusterTime': bson.timestamp.Timestamp(1588636800, 0)  # datetime.datetime(2020, 5, 5, 3, 0, 0,0)
+                'clusterTime': bson.timestamp.Timestamp(1588636800, 0)  # datetime.datetime(2020, 5, 5, 3, 0, 0, 0)
             }).return_value,
             Mock(spec_set=ChangeStream, return_value={
                 'operationType': 'insert',
@@ -183,7 +269,8 @@ class TestChangeStreams(unittest.TestCase):
 
         cursor_mock = Mock(spec_set=CollectionChangeStream).return_value
         type(cursor_mock).alive = PropertyMock(return_value=True)
-        type(cursor_mock).resume_token = PropertyMock(side_effect=['token1', 'token2', 'token3', 'token4',
+        type(cursor_mock).resume_token = PropertyMock(side_effect=['token1', 'token2',
+                                                                   'token3', 'token4',
                                                                    'token5', 'token6'])
         cursor_mock.try_next.side_effect = changes
 
@@ -211,6 +298,13 @@ class TestChangeStreams(unittest.TestCase):
                 'mydb-stream3': {
                     'token': 'token6',
                 },
+                'mydb-stream4': {
+                    'token':
+                        {'_data': '825EBCF4CF000000972B022C0100296E5A1004A50DD58E7B964E14B0FC769A85D61D5646645F696400645EBCF4CF5A06C441DC02E1080001'}
+                },
+                'mydb-stream5': {
+                    'token': None
+                },
             }
         }, state)
 
@@ -218,18 +312,17 @@ class TestChangeStreams(unittest.TestCase):
             'RecordMessage',  # insert
             'RecordMessage',  # insert
             'RecordMessage',  # delete
-            'SchemaMessage',
             'RecordMessage',  # insert
             'StateMessage',
             'RecordMessage',  # update
         ], [msg.__class__.__name__ for msg in messages])
 
         self.assertListEqual([
-            {'_id': 'id11', 'key1': 1, 'key2': 'abc'},
-            {'_id': 'id21', 'key6': 12, 'key10': 'abc'},
-            {'_id': 'id22', '_sdc_deleted_at': '2020-05-05T00:00:00+00:00'},
-            {'_id': 'id13', 'key3': '2020-05-05T00:00:00.000000Z'},
-            {'_id': 'id13', 'key2': 'eeeeef', },
+            {'_id': 'id11', 'document': {'_id': 'id11', 'key1': 1, 'key2': 'abc','key3': {'a': 1, 'b': '2020-04-10T11:50:55.000000Z'}}, common.SDC_DELETED_AT: None},
+            {'_id': 'id21', 'document':{'_id': 'id21', 'key6': 12, 'key10': 'abc','key11': [1,2,3, '10']}, common.SDC_DELETED_AT: None},
+            {'_id': 'id22', 'document': {'_id': 'id22'}, common.SDC_DELETED_AT: '2020-05-05T00:00:00.000000Z'},
+            {'_id': 'id13', 'document': {'_id': 'id13', 'key3': '2020-05-05T00:00:00.000000Z'}, common.SDC_DELETED_AT: None},
+            {'_id': 'id13', 'document': {'_id': 'id13', 'key2': 'eeeeef' }, common.SDC_DELETED_AT: None},
         ], [msg.record for msg in messages if isinstance(msg, RecordMessage)])
 
         self.assertEqual(common.COUNTS['mydb-stream1'], 3)
@@ -257,12 +350,6 @@ class TestChangeStreams(unittest.TestCase):
             'mydb-stream1': {'1', '2', '3', '4'},
             'mydb-stream2': None,
             'mydb-stream3': {},
-        }
-
-        schemas = {
-            'mydb-stream1': {'type': 'object', 'properties': {}},
-            'mydb-stream2': {'type': 'object', 'properties': {}},
-            'mydb-stream3': {'type': 'object', 'properties': {}},
         }
 
         streams = {
@@ -321,8 +408,6 @@ class TestChangeStreams(unittest.TestCase):
                                         'stream2': Mock(),
                                         'stream3': Mock(),
                                     }).return_value,
-                                    None,
-                                    schemas,
                                     rows_saved)
 
         self.assertEqual(3, rows_saved['mydb-stream1'])
@@ -332,7 +417,6 @@ class TestChangeStreams(unittest.TestCase):
         self.assertListEqual([
             'RecordMessage',
             'RecordMessage',
-            'SchemaMessage',
             'RecordMessage',
         ], [m.__class__.__name__ for m in messages])
 
