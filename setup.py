@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
     long_desc = fh.read()
 
 setup(name='pipelinewise-tap-mongodb',
-      version='1.0.0',
+      version='1.0.1',
       description='Singer.io tap for extracting data from MongoDB - Pipelinewise compatible',
       long_description=long_desc,
       long_description_content_type='text/markdown',
