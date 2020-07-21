@@ -271,24 +271,30 @@ class TestChangeStreams(unittest.TestCase):
         type(cursor_mock).alive = PropertyMock(return_value=True)
         type(cursor_mock).resume_token = PropertyMock(side_effect=[
             {
-                '_data': 'token1'
+                '_data': 'token1',
+                'some_extra_property': b'\x81'
             },
             {
-                '_data': 'token2'
-            },
-
-            {
-                '_data': 'token3'
-            },
-            {
-                '_data': 'token4'
+                '_data': 'token2',
+                'some_extra_property': b'\x81'
             },
 
             {
-                '_data': 'token5'
+                '_data': 'token3',
+                'some_extra_property': b'\x81'
             },
             {
-                '_data': 'token6'
+                '_data': 'token4',
+                'some_extra_property': b'\x81'
+            },
+
+            {
+                '_data': 'token5',
+                'some_extra_property': b'\x81'
+            },
+            {
+                '_data': 'token6',
+                'some_extra_property': b'\x81'
             }
         ])
 
