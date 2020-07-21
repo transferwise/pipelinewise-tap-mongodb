@@ -110,7 +110,18 @@ def sync_database(database: Database,
 
             # Note that the ChangeStream's resume token may be updated
             # even when no changes are returned.
-            resume_token = cursor.resume_token
+
+            # Token can look like in MongoDB 4.2:
+            #       {'_data': 'A_LONG_HEX_DECIMAL_STRING'}
+            #    or {'_data': 'A_LONG_HEX_DECIMAL_STRING', '_typeBits': b'SOME_HEX'}
+
+            # Get the '_data' only from resume token
+            # token can contain a property '_typeBits' of type bytes which cannot be json
+            # serialized when creating the state.
+            # '_data' is enough to resume LOG_BASED
+            resume_token = {
+                '_data': cursor.resume_token['_data']
+            }
 
             change = cursor.try_next()
 
