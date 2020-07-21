@@ -269,9 +269,29 @@ class TestChangeStreams(unittest.TestCase):
 
         cursor_mock = Mock(spec_set=CollectionChangeStream).return_value
         type(cursor_mock).alive = PropertyMock(return_value=True)
-        type(cursor_mock).resume_token = PropertyMock(side_effect=['token1', 'token2',
-                                                                   'token3', 'token4',
-                                                                   'token5', 'token6'])
+        type(cursor_mock).resume_token = PropertyMock(side_effect=[
+            {
+                '_data': 'token1'
+            },
+            {
+                '_data': 'token2'
+            },
+
+            {
+                '_data': 'token3'
+            },
+            {
+                '_data': 'token4'
+            },
+
+            {
+                '_data': 'token5'
+            },
+            {
+                '_data': 'token6'
+            }
+        ])
+
         cursor_mock.try_next.side_effect = changes
 
         mock_enter = Mock()
@@ -290,13 +310,20 @@ class TestChangeStreams(unittest.TestCase):
         self.assertEqual({
             'bookmarks': {
                 'mydb-stream1': {
-                    'token': 'token6',
+                    'token':
+                        {
+                            '_data': 'token6'
+                        },
                 },
                 'mydb-stream2': {
-                    'token': 'token6',
+                    'token': {
+                        '_data': 'token6'
+                    },
                 },
                 'mydb-stream3': {
-                    'token': 'token6',
+                    'token': {
+                        '_data': 'token6'
+                    },
                 },
                 'mydb-stream4': {
                     'token':
