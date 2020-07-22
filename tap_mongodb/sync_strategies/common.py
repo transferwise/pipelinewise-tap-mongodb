@@ -69,9 +69,13 @@ def class_to_string(key_value: Any, key_type: str) -> str:
     Raises: UnsupportedKeyTypeException if key_type is not supported
     """
     if key_type == 'datetime':
-        timezone = tzlocal.get_localzone()
-        local_datetime = timezone.localize(key_value)
-        utc_datetime = local_datetime.astimezone(pytz.UTC)
+        if key_value.tzinfo is None:
+            timezone = tzlocal.get_localzone()
+            local_datetime = timezone.localize(key_value)
+            utc_datetime = local_datetime.astimezone(pytz.UTC)
+        else:
+            utc_datetime = key_value.replace(tzinfo=pytz.UTC)
+
         return utils.strftime(utc_datetime)
 
     if key_type == 'Timestamp':
