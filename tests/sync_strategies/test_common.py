@@ -80,9 +80,28 @@ class TestRowToSchemaMessage(unittest.TestCase):
         with self.assertRaises(UnsupportedKeyTypeException):
             common.class_to_string('a', 'random type')
 
-    def test_transform_value_with_datetime_should_return_utc_formatted_date(self):
+    def test_transform_value_with_naive_datetime_should_return_utc_formatted_date(self):
+        import tzlocal
+        import pytz
+
         date = datetime(2020, 5, 13, 15, 00, 00)
-        self.assertEqual('2020-05-13T12:00:00.000000Z', common.transform_value(date, None))
+        output = common.transform_value(date, None)
+
+        local_tz = tzlocal.get_localzone()
+        dt = local_tz.localize(date).astimezone(pytz.UTC)
+
+        fmt = '%Y-%m-%dT%H:%M:%S.%fZ'
+
+        self.assertEqual(dt.strftime(fmt), output)
+
+    def test_transform_value_with_datetime_should_return_utc_formatted_date(self):
+        import tzlocal
+        import pytz
+
+        amsterdam = pytz.timezone('Europe/Amsterdam')
+        date = amsterdam.localize(datetime(2020, 5, 13, 15, 00, 00))
+
+        self.assertEqual('2020-05-13T13:00:00.000000Z', common.transform_value(date, None))
 
     def test_transform_value_with_bytes_should_return_decoded_string(self):
         b = b'Pythonnnn'

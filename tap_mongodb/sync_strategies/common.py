@@ -74,7 +74,7 @@ def class_to_string(key_value: Any, key_type: str) -> str:
             local_datetime = timezone.localize(key_value)
             utc_datetime = local_datetime.astimezone(pytz.UTC)
         else:
-            utc_datetime = key_value.replace(tzinfo=pytz.UTC)
+            utc_datetime = key_value.astimezone(pytz.UTC)
 
         return utils.strftime(utc_datetime)
 
