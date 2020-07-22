@@ -22,12 +22,11 @@ setup(name='pipelinewise-tap-mongodb',
       extras_require={
           'dev': [
               'pylint',
-              'nose',
               'ipdb'
           ],
           'test': [
-              'pytest',
-              'coverage'
+              'pytest==5.4',
+              'pytest-cov==2.10'
           ]
       },
       entry_points='''
