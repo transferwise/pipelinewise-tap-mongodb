@@ -311,7 +311,7 @@ class TestChangeStreams(unittest.TestCase):
         mock_db.watch.return_value = mock_watch
         type(mock_db).name = PropertyMock(return_value='mydb')
 
-        change_streams.sync_database(mock_db, streams, state)
+        change_streams.sync_database(mock_db, streams, state, 1, 1)
 
         self.assertEqual({
             'bookmarks': {
@@ -343,19 +343,19 @@ class TestChangeStreams(unittest.TestCase):
 
         self.assertListEqual([
             'RecordMessage',  # insert
+            'RecordMessage',  # update
             'RecordMessage',  # insert
             'RecordMessage',  # delete
             'RecordMessage',  # insert
             'StateMessage',
-            'RecordMessage',  # update
         ], [msg.__class__.__name__ for msg in messages])
 
         self.assertListEqual([
             {'_id': 'id11', 'document': {'_id': 'id11', 'key1': 1, 'key2': 'abc','key3': {'a': 1, 'b': '2020-04-10T11:50:55.000000Z'}}, common.SDC_DELETED_AT: None},
+            {'_id': 'id13', 'document': {'_id': 'id13', 'key2': 'eeeeef'}, common.SDC_DELETED_AT: None},
             {'_id': 'id21', 'document':{'_id': 'id21', 'key6': 12, 'key10': 'abc','key11': [1,2,3, '10']}, common.SDC_DELETED_AT: None},
             {'_id': 'id22', 'document': {'_id': 'id22'}, common.SDC_DELETED_AT: '2020-05-05T00:00:00.000000Z'},
             {'_id': 'id13', 'document': {'_id': 'id13', 'key3': '2020-05-05T00:00:00.000000Z'}, common.SDC_DELETED_AT: None},
-            {'_id': 'id13', 'document': {'_id': 'id13', 'key2': 'eeeeef' }, common.SDC_DELETED_AT: None},
         ], [msg.record for msg in messages if isinstance(msg, RecordMessage)])
 
         self.assertEqual(common.COUNTS['mydb-stream1'], 3)

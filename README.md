@@ -29,12 +29,14 @@ Create json file called `config.json`, with the following contents:
 ```
 The following parameters are optional for your config file:
 
-| Name | Type | Description |
-| -----|------|------------ |
-| `replica_set` | string | name of replica set |
-| `ssl` | Boolean | can be set to true to connect using ssl, default false |
-| `verify_mode` | Boolean | Default SSL verify mode, default true |
-| `include_schemas_in_destination_stream_name` | Boolean | forces the stream names to take the form `<database_name>-<collection_name>` instead of `<collection_name>`, default false|
+| Name | Type | Default value| Description |
+| -----|------|--------|------------ |
+| `replica_set` | string | null | name of replica set |
+| `ssl` | Boolean | false | can be set to true to connect using ssl |
+| `verify_mode` | Boolean | true | Default SSL verify mode |
+| `include_schemas_in_destination_stream_name` | Boolean |false  | forces the stream names to take the form `<database_name>-<collection_name>` instead of `<collection_name>`|
+| `update_buffer_size` | int | 1 | [LOG_BASED] The size of the buffer that holds detected update operations in memory, the buffer is flushed once the size is reached |
+| `await_time_ms` | int | 1000 | [LOG_BASED] The maximum amount of time in milliseconds the loge_base method waits for new data changes before exiting. |
 
 All of the above attributes are required by the tap to connect to your mongo instance. 
 here is a [sample configuration file](./sample_config.json).
