@@ -27,3 +27,15 @@ class NoReadPrivilegeException(Exception):
     def __init__(self, user, db_name):
         msg = f"The user '{user}' has no read privilege on the database '{db_name}'!"
         super(NoReadPrivilegeException, self).__init__(msg)
+
+class InvalidUpdateBufferSizeError(Exception):
+    """Raised if the given update buffer size used in log_based is invalid"""
+    def __init__(self, size, reason):
+        msg = f"Invalid update buffer size {size}! {reason}"
+        super(InvalidUpdateBufferSizeError, self).__init__(msg)
+
+class InvalidAwaitTimeError(Exception):
+    """Raised if the given await time used in log_based is invalid"""
+    def __init__(self, time_ms, reason):
+        msg = f"Invalid await time {time_ms}! {reason}"
+        super(InvalidAwaitTimeError, self).__init__(msg)

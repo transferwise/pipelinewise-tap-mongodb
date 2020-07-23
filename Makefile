@@ -27,12 +27,10 @@ setup: create_venv setup_local_db upgrade_pip install_dep check_dep
 	echo "Setup is finished"
 
 pylint:
-	pylint tap_mongodb tap_mongodb/sync_strategies --rcfile=pylintrc; \
+	pylint tap_mongodb tap_mongodb/sync_strategies --rcfile=pylintrc
 
 test:
-	pytest tests -v; \
+	pytest tests -v
 
 test_cov:
-	coverage run -m pytest tests -v; \
-	coverage report --include="tap_mongodb/*";
-
+	pytest --cov=tap_mongodb tests -v
