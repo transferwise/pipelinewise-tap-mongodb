@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+Make 2 LOG_BASED parameters configurable:
+
+* `await_time_ms` would control how long the log_based method would wait for new change streams before stopping, default is 1000ms=1s which is the default anyway in the server.
+
+* `update_buffer_size` would control how many update operation we should keep in the memory before having to make a call to `find` operation to get the documents from the server. The default value is 1, i.e every detected update will be sent to stdout right away.
+
 ## 1.0.1
    * Fix case where resume tokens has extra properties that are not json serializable by saving `_data` only. 
 
