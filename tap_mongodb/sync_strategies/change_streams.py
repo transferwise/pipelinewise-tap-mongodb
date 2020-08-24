@@ -12,8 +12,10 @@ from tap_mongodb.sync_strategies import common
 LOGGER = singer.get_logger('tap_mongodb')
 
 RESUME_TOKEN_KEY = 'token'
-MAX_AWAIT_TIME_MS = 300000  # 5 minutes
-MAX_UPDATE_BUFFER_LENGTH = 500
+DEFAULT_AWAIT_TIME_MS = 1000  # the server default https://docs.mongodb.com/manual/reference/method/db.watch/#db.watch
+MIN_UPDATE_BUFFER_LENGTH = 1 # default
+MAX_UPDATE_BUFFER_LENGTH = common.UPDATE_BOOKMARK_PERIOD # set max as the same value as bookmark period as we flush
+# the buffer anyway after every UPDATE_BOOKMARK_PERIOD
 
 
 def update_bookmarks(state: Dict, tap_stream_ids: Set[str], token: Dict) -> Dict:
@@ -70,7 +72,9 @@ def get_token_from_state(streams_to_sync: Set[str], state: Dict) -> Optional[Dic
 
 def sync_database(database: Database,
                   streams_to_sync: Dict[str, Dict],
-                  state: Dict
+                  state: Dict,
+                  update_buffer_size: int,
+                  await_time_ms: int
                   ) -> None:
     """
     Syncs the records from the given collection using ChangeStreams
@@ -78,6 +82,8 @@ def sync_database(database: Database,
         database: MongoDB Database instance to sync
         streams_to_sync: Dict of stream dictionary with all the stream details
         state: state dictionary
+        update_buffer_size: the size of buffer used to hold detected updates
+        await_time_ms:  the maximum time in milliseconds for the log based to wait for changes before exiting
     """
     LOGGER.info('Starting LogBased sync for streams "%s" in database "%s"', list(streams_to_sync.keys()), database.name)
 
@@ -103,10 +109,12 @@ def sync_database(database: Database,
                     {'ns.coll': {'$in': [val['table_name'] for val in streams_to_sync.values()]}}
                 ]
             }}],
-            max_await_time_ms=MAX_AWAIT_TIME_MS,
+            max_await_time_ms=await_time_ms,
             start_after=get_token_from_state(stream_ids, state)
     ) as cursor:
         while cursor.alive:
+
+            change = cursor.try_next()
 
             # Note that the ChangeStream's resume token may be updated
             # even when no changes are returned.
@@ -123,12 +131,10 @@ def sync_database(database: Database,
                 '_data': cursor.resume_token['_data']
             }
 
-            change = cursor.try_next()
-
             # After MAX_AWAIT_TIME_MS has elapsed, the cursor will return None.
             # write state and exit
             if change is None:
-                LOGGER.info('No change streams after %s, updating bookmark and exiting...', MAX_AWAIT_TIME_MS)
+                LOGGER.info('No change streams after %s, updating bookmark and exiting...', await_time_ms)
 
                 state = update_bookmarks(state, stream_ids, resume_token)
                 singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
@@ -170,7 +176,7 @@ def sync_database(database: Database,
             state = update_bookmarks(state, stream_ids, resume_token)
 
             # flush buffer if it has filled up or flush and write state every UPDATE_BOOKMARK_PERIOD messages
-            if sum(len(stream_buffer) for stream_buffer in update_buffer.values()) >= MAX_UPDATE_BUFFER_LENGTH or \
+            if sum(len(stream_buffer) for stream_buffer in update_buffer.values()) >= update_buffer_size or \
                     sum(rows_saved.values()) % common.UPDATE_BOOKMARK_PERIOD == 0:
 
                 LOGGER.debug('Flushing update buffer ...')

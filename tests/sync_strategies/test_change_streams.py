@@ -1,8 +1,8 @@
 import unittest
-from datetime import datetime
-
 import bson
+import pytz
 
+from datetime import datetime
 from unittest.mock import patch, Mock, PropertyMock, MagicMock
 from pymongo.change_stream import CollectionChangeStream, ChangeStream
 from pymongo.collection import Collection
@@ -14,6 +14,8 @@ from tap_mongodb.sync_strategies import common
 
 
 class TestChangeStreams(unittest.TestCase):
+
+    maxDiff = None
 
     def tearDown(self) -> None:
         common.SCHEMA_COUNT.clear()
@@ -227,7 +229,7 @@ class TestChangeStreams(unittest.TestCase):
                     '_id': 'id11',
                     'key1': 1,
                     'key2': 'abc',
-                    'key3': {'a': 1, 'b': datetime(2020, 4, 10, 14, 50, 55, 0)}
+                    'key3': {'a': 1, 'b': datetime(2020, 4, 10, 14, 50, 55, 0, tzinfo=pytz.utc)}
                 }
             }).return_value,
             Mock(spec_set=ChangeStream, return_value={
@@ -311,15 +313,14 @@ class TestChangeStreams(unittest.TestCase):
         mock_db.watch.return_value = mock_watch
         type(mock_db).name = PropertyMock(return_value='mydb')
 
-        change_streams.sync_database(mock_db, streams, state)
+        change_streams.sync_database(mock_db, streams, state, 1, 1)
 
         self.assertEqual({
             'bookmarks': {
                 'mydb-stream1': {
-                    'token':
-                        {
-                            '_data': 'token6'
-                        },
+                    'token': {
+                        '_data': 'token6'
+                    },
                 },
                 'mydb-stream2': {
                     'token': {
@@ -343,19 +344,19 @@ class TestChangeStreams(unittest.TestCase):
 
         self.assertListEqual([
             'RecordMessage',  # insert
+            'RecordMessage',  # update
             'RecordMessage',  # insert
             'RecordMessage',  # delete
             'RecordMessage',  # insert
             'StateMessage',
-            'RecordMessage',  # update
         ], [msg.__class__.__name__ for msg in messages])
 
         self.assertListEqual([
-            {'_id': 'id11', 'document': {'_id': 'id11', 'key1': 1, 'key2': 'abc','key3': {'a': 1, 'b': '2020-04-10T11:50:55.000000Z'}}, common.SDC_DELETED_AT: None},
+            {'_id': 'id11', 'document': {'_id': 'id11', 'key1': 1, 'key2': 'abc','key3': {'a': 1, 'b': '2020-04-10T14:50:55.000000Z'}}, common.SDC_DELETED_AT: None},
+            {'_id': 'id13', 'document': {'_id': 'id13', 'key2': 'eeeeef'}, common.SDC_DELETED_AT: None},
             {'_id': 'id21', 'document':{'_id': 'id21', 'key6': 12, 'key10': 'abc','key11': [1,2,3, '10']}, common.SDC_DELETED_AT: None},
             {'_id': 'id22', 'document': {'_id': 'id22'}, common.SDC_DELETED_AT: '2020-05-05T00:00:00.000000Z'},
             {'_id': 'id13', 'document': {'_id': 'id13', 'key3': '2020-05-05T00:00:00.000000Z'}, common.SDC_DELETED_AT: None},
-            {'_id': 'id13', 'document': {'_id': 'id13', 'key2': 'eeeeef' }, common.SDC_DELETED_AT: None},
         ], [msg.record for msg in messages if isinstance(msg, RecordMessage)])
 
         self.assertEqual(common.COUNTS['mydb-stream1'], 3)

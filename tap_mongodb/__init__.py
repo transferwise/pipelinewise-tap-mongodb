@@ -3,7 +3,7 @@ import copy
 import json
 import ssl
 import sys
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import singer
 from pymongo import MongoClient
@@ -13,6 +13,7 @@ import tap_mongodb.sync_strategies.change_streams as change_streams
 import tap_mongodb.sync_strategies.common as common
 import tap_mongodb.sync_strategies.full_table as full_table
 import tap_mongodb.sync_strategies.incremental as incremental
+from tap_mongodb.config_utils import validate_config
 from tap_mongodb.db_utils import get_databases, produce_collection_schema
 from tap_mongodb.errors import InvalidReplicationMethodException, NoReadPrivilegeException
 from tap_mongodb.stream_utils import is_log_based_stream, is_stream_selected, write_schema_message, \
@@ -165,7 +166,13 @@ def sync_traditional_streams(client: MongoClient, traditional_streams: List[Dict
         sync_traditional_stream(client, stream, state)
 
 
-def sync_log_based_streams(client: MongoClient, log_based_streams: List[Dict], database_name: str, state: Dict):
+def sync_log_based_streams(client: MongoClient,
+                           log_based_streams: List[Dict],
+                           database_name: str,
+                           state: Dict,
+                           update_buffer_size: Optional[int],
+                           await_time_ms: Optional[int]
+                           ):
     """
     Sync log_based streams all at once by listening on the database-level change streams events.
     Args:
@@ -173,6 +180,8 @@ def sync_log_based_streams(client: MongoClient, log_based_streams: List[Dict], d
         log_based_streams:  list of streams to sync
         database_name: name of the database to sync from
         state: state dictionary
+        update_buffer_size: the size of buffer used to hold detected updates
+        await_time_ms:  the maximum time in milliseconds for the log based to wait for changes before exiting
     """
     if not log_based_streams:
         return
@@ -193,22 +202,26 @@ def sync_log_based_streams(client: MongoClient, log_based_streams: List[Dict], d
 
     with metrics.job_timer('sync_table') as timer:
         timer.tags['database'] = database_name
+        update_buffer_size = update_buffer_size or change_streams.MIN_UPDATE_BUFFER_LENGTH
+        await_time_ms = await_time_ms or change_streams.DEFAULT_AWAIT_TIME_MS
 
-        change_streams.sync_database(client[database_name], streams, state)
+        change_streams.sync_database(client[database_name], streams, state, update_buffer_size, await_time_ms)
 
     state = singer.set_currently_syncing(state, None)
     singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
 
 
-def do_sync(client: MongoClient, catalog: Dict, database_name: str, state: Dict):
+def do_sync(client: MongoClient, catalog: Dict, config: Dict, state: Dict):
     """
     Syncs all the selected streams in the catalog
     Args:
         client: MongoDb client instance
         catalog: dictionary with all the streams details
-        database_name: name of the database to sync from
+        config: config dictionary
         state: state
     """
+    validate_config(config)
+
     all_streams = catalog['streams']
     streams_to_sync = get_streams_to_sync(all_streams, state)
 
@@ -219,7 +232,13 @@ def do_sync(client: MongoClient, catalog: Dict, database_name: str, state: Dict)
     LOGGER.debug('Sync of traditional streams done')
 
     LOGGER.debug('Starting sync of log based streams ...')
-    sync_log_based_streams(client, log_based_streams, database_name, state)
+    sync_log_based_streams(client,
+                           log_based_streams,
+                           config['database'],
+                           state,
+                           config.get('update_buffer_size'),
+                           config.get('await_time_ms')
+                           )
     LOGGER.debug('Sync of log based streams done')
 
     LOGGER.info(common.get_sync_summary(catalog))
@@ -263,7 +282,7 @@ def main_impl():
         do_discover(client, config)
     elif args.catalog:
         state = args.state or {}
-        do_sync(client, args.catalog.to_dict(), config['database'], state)
+        do_sync(client, args.catalog.to_dict(), config, state)
 
 
 def main():
