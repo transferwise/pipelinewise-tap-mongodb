@@ -151,7 +151,7 @@ def safe_transform_datetime(value: datetime.datetime, path):
                                                                               value.microsecond)
         raise MongoInvalidDateTimeException("Found invalid datetime at [{}]: {}".format(
             ".".join(map(str, path)),
-            value))
+            value)) from ex
     return utils.strftime(utc_datetime)
 
 
@@ -214,7 +214,7 @@ def row_to_singer_record(stream: Dict,
                           if not isinstance(v, (bson.min_key.MinKey, bson.max_key.MaxKey))}
     except MongoInvalidDateTimeException as ex:
         raise SyncException(
-            "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex))
+            "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex)) from ex
 
     row_to_persist = {
         '_id': row_to_persist['_id'],
