@@ -2,24 +2,17 @@ version: 3
 
 jobs:
   build:
-# enable once needed
-#    docker:
-#      - image: mongo:4.2-bionic
-#        environment:
-#          MONGO_INITDB_ROOT_USERNAME: mongoAdmin # These are dummy credentials for CI checks only
-#          MONGO_INITDB_ROOT_PASSWORD: Password1
-#        command: [mongod, --replSet, rs0]
     docker:
       - image: circleci/python:3.6.2
     steps:
       - checkout
       - add_ssh_keys
 
-      - restore_cache:
-          keys:
-            - v1-dependencies-{{ checksum "setup.py" }}
-            # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+#      - restore_cache:
+#          keys:
+#            - v1-dependencies-{{ checksum "setup.py" }}
+#            # fallback to using the latest cache if no exact match is found
+#            - v1-dependencies-
 
       - run:
           name: 'Create virtual env'
@@ -38,10 +31,10 @@ jobs:
             source ./venv/bin/activate
             make check_dep
 
-      - save_cache:
-          paths:
-            - ./venv
-          key: v1-dependencies-{{ checksum "setup.py" }}
+#      - save_cache:
+#          paths:
+#            - ./venv
+#          key: v1-dependencies-{{ checksum "setup.py" }}
 
       - run:
           name: 'Pylinting'
