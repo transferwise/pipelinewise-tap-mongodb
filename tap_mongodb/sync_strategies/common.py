@@ -181,7 +181,7 @@ def transform_value(value: Any, path) -> Any:
         bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database),
     }
 
-    if type(value) in conversion:
+    if isinstance(value, tuple(conversion.keys())):
         return conversion[type(value)](value, path)
 
     return value
@@ -211,7 +211,7 @@ def row_to_singer_record(stream: Dict,
 
     try:
         row_to_persist = {k: transform_value(v, [k]) for k, v in row.items()
-                          if type(v) not in [bson.min_key.MinKey, bson.max_key.MaxKey]}
+                          if not isinstance(v, (bson.min_key.MinKey, bson.max_key.MaxKey))}
     except MongoInvalidDateTimeException as ex:
         raise SyncException(
             "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex))
