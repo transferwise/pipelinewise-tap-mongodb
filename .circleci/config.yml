@@ -10,7 +10,7 @@ jobs:
 #          MONGO_INITDB_ROOT_PASSWORD: Password1
 #        command: [mongod, --replSet, rs0]
     docker:
-      - image: circleci/python:3.6.2
+      - image: circleci/python:3.6.9
     steps:
       - checkout
       - add_ssh_keys

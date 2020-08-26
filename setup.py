@@ -18,11 +18,12 @@ setup(name='pipelinewise-tap-mongodb',
           'pymongo==3.10.*',
           'tzlocal==2.0.*',
           'terminaltables==3.1.*',
+          'dnspython==2.0.*',
       ],
       extras_require={
           'dev': [
-              'pylint',
-              'ipdb'
+              'pylint== 2.6.*',
+              'ipdb==0.13.*'
           ],
           'test': [
               'pytest==5.4',
