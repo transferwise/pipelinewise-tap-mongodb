@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.0
+Add support for SRV urls.
+
 ## 1.1.0
 
 Make 2 LOG_BASED parameters configurable:
