@@ -27,6 +27,16 @@ Create json file called `config.json`, with the following contents:
   "database": "<database name to sync from>"
 }
 ```
+
+or
+
+```json
+{
+  "uri": "<connexion URI string>", 
+  "database": "<database name to sync from>"
+}
+```
+
 The following parameters are optional for your config file:
 
 | Name | Type | Default value| Description |

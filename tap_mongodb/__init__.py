@@ -30,6 +30,11 @@ REQUIRED_CONFIG_KEYS = [
     'database'
 ]
 
+REQUIRED_URI_CONFIG_KEYS = [
+    'uri',
+    'database'
+]
+
 LOG_BASED_METHOD = 'LOG_BASED'
 INCREMENTAL_METHOD = 'INCREMENTAL'
 FULL_TABLE_METHOD = 'FULL_TABLE'
@@ -248,32 +253,42 @@ def main_impl():
     """
     Main function
     """
-    args = utils.parse_args(REQUIRED_CONFIG_KEYS)
+    args = utils.parse_args([])
+    if args.config.get("uri", None) is None:
+        args = utils.parse_args(REQUIRED_CONFIG_KEYS)
+    else:
+        args = utils.parse_args(REQUIRED_URI_CONFIG_KEYS)
+
     config = args.config
 
-    # Default SSL verify mode to true, give option to disable
-    verify_mode = config.get('verify_mode', 'true') == 'true'
-    use_ssl = config.get('ssl') == 'true'
+    if config.get("uri", None) is None:
+        # Default SSL verify mode to true, give option to disable
+        verify_mode = config.get('verify_mode', 'true') == 'true'
+        use_ssl = config.get('ssl') == 'true'
 
-    connection_params = {"host": config['host'],
-                         "port": int(config['port']),
-                         "username": config.get('user', None),
-                         "password": config.get('password', None),
-                         "authSource": config['auth_database'],
-                         "ssl": use_ssl,
-                         "replicaSet": config.get('replica_set', None),
-                         "readPreference": 'secondaryPreferred'
-                         }
+        connection_params = {"host": config['host'],
+                            "port": int(config['port']),
+                            "username": config.get('user', None),
+                            "password": config.get('password', None),
+                            "authSource": config['auth_database'],
+                            "ssl": use_ssl,
+                            "replicaSet": config.get('replica_set', None),
+                            "readPreference": 'secondaryPreferred'
+                            }
+        
 
-    # NB: "ssl_cert_reqs" must ONLY be supplied if `SSL` is true.
-    if not verify_mode and use_ssl:
-        connection_params["ssl_cert_reqs"] = ssl.CERT_NONE
+        # NB: "ssl_cert_reqs" must ONLY be supplied if `SSL` is true.
+        if not verify_mode and use_ssl:
+            connection_params["ssl_cert_reqs"] = ssl.CERT_NONE
 
-    client = MongoClient(**connection_params)
+        client = MongoClient(**connection_params)
 
-    LOGGER.info('Connected to MongoDB host: %s, version: %s',
-                config['host'],
-                client.server_info().get('version', 'unknown'))
+        LOGGER.info('Connected to MongoDB host: %s, version: %s',
+                    config['host'],
+                    client.server_info().get('version', 'unknown'))
+    else:
+        client = MongoClient(config.get("uri", None))
+        LOGGER.info('Connected to MongoDB, version: %s', client.server_info().get('version', 'unknown'))
 
     common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = \
         (config.get('include_schemas_in_destination_stream_name') == 'true')
