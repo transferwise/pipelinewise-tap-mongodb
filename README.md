@@ -33,7 +33,9 @@ or
 ```json
 {
   "uri": "<connexion URI string>", 
-  "database": "<database name to sync from>"
+  "database": "<database name to sync from>",
+  "user": "<username>",
+  "auth_database": "<database name to authenticate on>"
 }
 ```
 

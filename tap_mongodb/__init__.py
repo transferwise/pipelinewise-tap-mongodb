@@ -32,7 +32,9 @@ REQUIRED_CONFIG_KEYS = [
 
 REQUIRED_URI_CONFIG_KEYS = [
     'uri',
-    'database'
+    'database',
+    'user',
+    'auth_database'
 ]
 
 LOG_BASED_METHOD = 'LOG_BASED'
