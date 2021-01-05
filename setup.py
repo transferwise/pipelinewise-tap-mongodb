@@ -26,7 +26,7 @@ setup(name='pipelinewise-tap-mongodb',
               'ipdb==0.13.*'
           ],
           'test': [
-              'pytest==5.4',
+              'pytest==6.2.1',
               'pytest-cov==2.10.1'
           ]
       },
