@@ -15,10 +15,10 @@ setup(name='pipelinewise-tap-mongodb',
       py_modules=['tap_mongodb'],
       install_requires=[
           'pipelinewise-singer-python==1.*',
-          'pymongo==3.10.*',
-          'tzlocal==2.0.*',
+          'pymongo>=3.10,<3.12',
+          'tzlocal>=2.0,<2.2',
           'terminaltables==3.1.*',
-          'dnspython==2.0.*',
+          'dnspython>=2.0,<2.2',
       ],
       extras_require={
           'dev': [
@@ -26,8 +26,8 @@ setup(name='pipelinewise-tap-mongodb',
               'ipdb==0.13.*'
           ],
           'test': [
-              'pytest==5.4',
-              'pytest-cov==2.10'
+              'pytest==6.2.1',
+              'pytest-cov==2.10.1'
           ]
       },
       entry_points='''
