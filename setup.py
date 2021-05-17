@@ -27,7 +27,7 @@ setup(name='pipelinewise-tap-mongodb',
           ],
           'test': [
               'pytest==6.2.1',
-              'pytest-cov==2.11.1'
+              'pytest-cov==2.12.0'
           ]
       },
       entry_points='''
