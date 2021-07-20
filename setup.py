@@ -22,7 +22,7 @@ setup(name='pipelinewise-tap-mongodb',
       ],
       extras_require={
           'dev': [
-              'pylint== 2.6.*',
+              'pylint>= 2.6,< 2.10',
               'ipdb==0.13.*'
           ],
           'test': [
