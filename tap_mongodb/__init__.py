@@ -9,10 +9,10 @@ import singer
 from pymongo import MongoClient
 from singer import metadata, metrics, utils
 
-import tap_mongodb.sync_strategies.change_streams as change_streams
-import tap_mongodb.sync_strategies.common as common
-import tap_mongodb.sync_strategies.full_table as full_table
-import tap_mongodb.sync_strategies.incremental as incremental
+from tap_mongodb.sync_strategies import change_streams
+from tap_mongodb.sync_strategies import common
+from tap_mongodb.sync_strategies import full_table
+from tap_mongodb.sync_strategies import incremental
 from tap_mongodb.config_utils import validate_config
 from tap_mongodb.db_utils import get_databases, produce_collection_schema
 from tap_mongodb.errors import InvalidReplicationMethodException, NoReadPrivilegeException

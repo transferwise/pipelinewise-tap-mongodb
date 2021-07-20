@@ -8,7 +8,7 @@ from typing import Optional, Dict
 from pymongo.collection import Collection
 from singer import utils
 
-import tap_mongodb.sync_strategies.common as common
+from tap_mongodb.sync_strategies import common
 
 LOGGER = singer.get_logger('tap_mongodb')
 
