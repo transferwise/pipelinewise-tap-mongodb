@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  LOGGING_CONF_FILE: ./sample_logging.conf
+
+jobs:
+  lint_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup virtual env
+        run: |
+          make create_venv
+          . ./venv/bin/activate
+          make upgrade_pip install_dep
+          make check_dep
+
+      - name: Pylinting
+        run: |
+          source ./venv/bin/activate
+          make pylint
+
+      - name: Unit Tests and coverage
+        run: |
+          source ./venv/bin/activate
+          make test_cov
