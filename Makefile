@@ -33,4 +33,4 @@ test:
 	pytest tests -v
 
 test_cov:
-	pytest --cov=tap_mongodb tests -v
+	pytest --cov=tap_mongodb tests -v --cov-fail-under=42
