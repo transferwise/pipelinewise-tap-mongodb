@@ -22,7 +22,6 @@ Create json file called `config.json`, with the following contents:
   "password": "<password>",
   "user": "<username>",
   "host": "<host ip address>",
-  "port": "<port>",
   "auth_database": "<database name to authenticate on>",
   "database": "<database name to sync from>"
 }
@@ -31,6 +30,8 @@ The following parameters are optional for your config file:
 
 | Name | Type | Default value| Description |
 | -----|------|--------|------------ |
+| `srv` | Boolean | false | uses a `mongodb+srv` protocol to connect. Disables the usage of `port` argument if set to `True` |
+| `port` | Integer | false | Connection port. Required if a non-srv connection is being used.  |
 | `replica_set` | string | null | name of replica set |
 | `ssl` | Boolean | false | can be set to true to connect using ssl |
 | `verify_mode` | Boolean | true | Default SSL verify mode |

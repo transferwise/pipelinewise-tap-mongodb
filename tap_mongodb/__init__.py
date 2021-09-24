@@ -4,6 +4,7 @@ import json
 import ssl
 import sys
 from typing import List, Dict, Optional
+from urllib import parse
 
 import singer
 from pymongo import MongoClient
@@ -23,12 +24,13 @@ LOGGER = singer.get_logger('tap_mongodb')
 
 REQUIRED_CONFIG_KEYS = [
     'host',
-    'port',
     'user',
     'password',
     'auth_database',
     'database'
 ]
+
+REQUIRED_CONFIG_KEYS_NON_SRV = REQUIRED_CONFIG_KEYS + ['port']
 
 LOG_BASED_METHOD = 'LOG_BASED'
 INCREMENTAL_METHOD = 'INCREMENTAL'
@@ -250,26 +252,41 @@ def main_impl():
     """
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
+    srv_connection = config.get('srv_connection') == True
+
+    if not srv_connection:
+        args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
+        config = args.config
 
     # Default SSL verify mode to true, give option to disable
     verify_mode = config.get('verify_mode', 'true') == 'true'
     use_ssl = config.get('ssl') == 'true'
 
-    connection_params = {"host": config['host'],
-                         "port": int(config['port']),
-                         "username": config.get('user', None),
-                         "password": config.get('password', None),
-                         "authSource": config['auth_database'],
-                         "ssl": use_ssl,
-                         "replicaSet": config.get('replica_set', None),
-                         "readPreference": 'secondaryPreferred'
-                         }
+    connection_host = '{protocol}://{user}:{password}@{host}{port}/{database}?'.format(
+        protocol='mongodb+srv' if srv_connection else 'mongodb',
+        user=config.get('user'),
+        password=config.get('password'),
+        host=config.get('host'),
+        port='' if srv_connection else ':{port}'.format(port=config.get('port')),
+        database=config.get('database')
+    )
 
-    # NB: "ssl_cert_reqs" must ONLY be supplied if `SSL` is true.
-    if not verify_mode and use_ssl:
-        connection_params["ssl_cert_reqs"] = ssl.CERT_NONE
+    connection_query = {
+        'readPreference': 'secondaryPreferred',
+        'authSource': config.get('auth_database'),
+    }
 
-    client = MongoClient(**connection_params)
+    if config.get('replica_set'):
+        connection_query['replicaSet'] = config.get('replica_set')
+
+    if use_ssl:
+        connection_query['tls'] = 'true'
+        connection_query['tlsAllowInvalidCertificates'] = 'true'
+
+    connection_string = connection_host + parse.urlencode(connection_query)
+    LOGGER.info(connection_string)
+
+    client = MongoClient(connection_string)
 
     LOGGER.info('Connected to MongoDB host: %s, version: %s',
                 config['host'],
