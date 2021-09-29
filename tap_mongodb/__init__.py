@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import copy
 import json
-import ssl
 import sys
 from typing import List, Dict, Optional
 from urllib import parse
@@ -252,9 +251,9 @@ def main_impl():
     """
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
-    srv_connection = config.get('srv_connection') == True
+    srv = config.get('srv') == True
 
-    if not srv_connection:
+    if not srv:
         args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
         config = args.config
 
@@ -262,29 +261,32 @@ def main_impl():
     verify_mode = config.get('verify_mode', 'true') == 'true'
     use_ssl = config.get('ssl') == 'true'
 
-    connection_host = '{protocol}://{user}:{password}@{host}{port}/{database}?'.format(
-        protocol='mongodb+srv' if srv_connection else 'mongodb',
-        user=config.get('user'),
-        password=config.get('password'),
-        host=config.get('host'),
-        port='' if srv_connection else ':{port}'.format(port=config.get('port')),
-        database=config.get('database')
-    )
-
     connection_query = {
         'readPreference': 'secondaryPreferred',
-        'authSource': config.get('auth_database'),
+        'authSource': config['auth_database'],
     }
 
     if config.get('replica_set'):
-        connection_query['replicaSet'] = config.get('replica_set')
+        connection_query['replicaSet'] = config['replica_set']
 
     if use_ssl:
-        connection_query['tls'] = 'true'
-        connection_query['tlsAllowInvalidCertificates'] = 'true'
+        connection_query['ssl'] = 'true'
 
-    connection_string = connection_host + parse.urlencode(connection_query)
-    LOGGER.info(connection_string)
+    # NB: "sslAllowInvalidCertificates" must ONLY be supplied if `SSL` is true.
+    if not verify_mode and use_ssl:
+        connection_query['sslAllowInvalidCertificates'] = 'true'
+
+    query_string = parse.urlencode(connection_query)
+
+    connection_string = '{protocol}://{user}:{password}@{host}{port}/{database}?{query_string}'.format(
+        protocol='mongodb+srv' if srv else 'mongodb',
+        user=config['user'],
+        password=config['password'],
+        host=config['host'],
+        port='' if srv else ':{port}'.format(port=int(config['port'])),
+        database=config['database'],
+        query_string=query_string
+    )
 
     client = MongoClient(connection_string)
 
