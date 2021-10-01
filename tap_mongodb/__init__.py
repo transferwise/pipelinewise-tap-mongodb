@@ -251,7 +251,7 @@ def main_impl():
     """
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
-    srv = config.get('srv') == True
+    srv = config.get('srv') is True
 
     if not srv:
         args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
