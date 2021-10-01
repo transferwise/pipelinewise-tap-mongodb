@@ -245,17 +245,15 @@ def do_sync(client: MongoClient, catalog: Dict, config: Dict, state: Dict):
     LOGGER.info(common.get_sync_summary(catalog))
 
 
-def main_impl():
+def get_connection_string(config: Dict):
     """
-    Main function
-    """
-    args = utils.parse_args(REQUIRED_CONFIG_KEYS)
-    config = args.config
-    srv = config.get('srv') is True
+    Generates a MongoClientConnectionString based on configuration
+    Args:
+        config: DB config
 
-    if not srv:
-        args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
-        config = args.config
+    Returns: A MongoClient connection string
+    """
+    srv = config.get('srv') == 'true'
 
     # Default SSL verify mode to true, give option to disable
     verify_mode = config.get('verify_mode', 'true') == 'true'
@@ -270,11 +268,11 @@ def main_impl():
         connection_query['replicaSet'] = config['replica_set']
 
     if use_ssl:
-        connection_query['ssl'] = 'true'
+        connection_query['tls'] = 'true'
 
     # NB: "sslAllowInvalidCertificates" must ONLY be supplied if `SSL` is true.
     if not verify_mode and use_ssl:
-        connection_query['sslAllowInvalidCertificates'] = 'true'
+        connection_query['tlsAllowInvalidCertificates'] = 'true'
 
     query_string = parse.urlencode(connection_query)
 
@@ -288,6 +286,22 @@ def main_impl():
         query_string=query_string
     )
 
+    return connection_string
+
+
+def main_impl():
+    """
+    Main function
+    """
+    args = utils.parse_args(REQUIRED_CONFIG_KEYS)
+    config = args.config
+    srv = config.get('srv') == 'true'
+
+    if not srv:
+        args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
+        config = args.config
+
+    connection_string = get_connection_string(config)
     client = MongoClient(connection_string)
 
     LOGGER.info('Connected to MongoDB host: %s, version: %s',
