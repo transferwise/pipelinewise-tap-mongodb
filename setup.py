@@ -14,7 +14,7 @@ setup(name='pipelinewise-tap-mongodb',
       classifiers=['Programming Language :: Python :: 3 :: Only'],
       py_modules=['tap_mongodb'],
       install_requires=[
-          'pipelinewise-singer-python==1.*',
+          'pipelinewise-singer-python>=1,<3',
           'pymongo>=3.10,<3.13',
           'tzlocal>=2.0,<2.2',
           'terminaltables==3.1.*',
