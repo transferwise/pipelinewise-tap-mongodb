@@ -5,13 +5,18 @@ with open('README.md', 'r') as fh:
     long_desc = fh.read()
 
 setup(name='pipelinewise-tap-mongodb',
-      version='1.2.0',
+      version='1.3.0',
       description='Singer.io tap for extracting data from MongoDB - Pipelinewise compatible',
       long_description=long_desc,
       long_description_content_type='text/markdown',
-      author='TransferWise',
+      author='Wise',
       url='https://github.com/transferwise/pipelinewise-tap-mongodb',
-      classifiers=['Programming Language :: Python :: 3 :: Only'],
+      classifiers=[
+          'Programming Language :: Python :: 3 :: Only',
+          'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
+      ],
       py_modules=['tap_mongodb'],
       install_requires=[
           'pipelinewise-singer-python==1.*',
