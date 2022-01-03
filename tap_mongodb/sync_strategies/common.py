@@ -34,7 +34,7 @@ def calculate_destination_stream_name(stream: Dict) -> str:
     """
     s_md = metadata.to_map(stream['metadata'])
     if INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME:
-        return "{}-{}".format(s_md.get((), {}).get('database-name'), stream['stream'])
+        return f"{s_md.get((), {}).get('database-name')}-{stream['stream']}"
 
     return stream['stream']
 
@@ -79,7 +79,7 @@ def class_to_string(key_value: Any, key_type: str) -> str:
         return utils.strftime(utc_datetime)
 
     if key_type == 'Timestamp':
-        return '{}.{}'.format(key_value.time, key_value.inc)
+        return f'{key_value.time}.{key_value.inc}'
 
     if key_type == 'bytes':
         return base64.b64encode(key_value).decode('utf-8')
@@ -87,8 +87,7 @@ def class_to_string(key_value: Any, key_type: str) -> str:
     if key_type in ['int', 'Int64', 'float', 'ObjectId', 'str', 'UUID']:
         return str(key_value)
 
-    raise UnsupportedKeyTypeException("{} is not a supported key type"
-                                      .format(key_type))
+    raise UnsupportedKeyTypeException(f"{key_type} is not a supported key type")
 
 
 def string_to_class(str_value: str, type_value: str) -> Any:
@@ -142,16 +141,9 @@ def safe_transform_datetime(value: datetime.datetime, path):
             # make sense to blow up on invalid Python datetimes (e.g.,
             # year=0). In this case we're formatting it as a string and
             # passing it along down the pipeline.
-            return "{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:06d}Z".format(value.year,
-                                                                              value.month,
-                                                                              value.day,
-                                                                              value.hour,
-                                                                              value.minute,
-                                                                              value.second,
-                                                                              value.microsecond)
-        raise MongoInvalidDateTimeException("Found invalid datetime at [{}]: {}".format(
-            ".".join(map(str, path)),
-            value)) from ex
+            return f"{value.year:04d}-{value.month:02d}-{value.day:02d}T{value.hour:02d}:{value.minute:02d}:" \
+                   f"{value.second:02d}.{value.microsecond:06d}Z"
+        raise MongoInvalidDateTimeException(f"Found invalid datetime at [{'.'.join(map(str, path))}]: {value}") from ex
     return utils.strftime(utc_datetime)
 
 
@@ -214,7 +206,7 @@ def row_to_singer_record(stream: Dict,
                           if not isinstance(v, (bson.min_key.MinKey, bson.max_key.MaxKey))}
     except MongoInvalidDateTimeException as ex:
         raise SyncException(
-            "Error syncing collection {}, object ID {} - {}".format(stream["tap_stream_id"], row['_id'], ex)) from ex
+            f"Error syncing collection {stream['tap_stream_id']}, object ID {row['_id']} - {ex}") from ex
 
     row_to_persist = {
         '_id': row_to_persist['_id'],
@@ -268,12 +260,12 @@ def get_sync_summary(catalog)->str:
                 db_name,
                 collection_name,
                 replication_method,
-                '{} records'.format(stream_count),
-                '{:.1f} records/second'.format(stream_count / float(stream_time)),
-                '{:.5f} seconds'.format(stream_time),
-                '{} schemas'.format(schemas_written),
-                '{:.5f} seconds'.format(schema_duration),
-                '{:.2f}%'.format(100 * schema_duration / float(stream_time))
+                f'{stream_count} records',
+                f'{stream_count / float(stream_time):.1f} records/second',
+                f'{stream_time:.5f} seconds',
+                f'{schemas_written} schemas',
+                f'{schema_duration:.5f} seconds',
+                f'{100 * schema_duration / float(stream_time):.2f}%'
             ]
         )
 
