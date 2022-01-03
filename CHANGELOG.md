@@ -2,6 +2,7 @@
 
 ## 1.3.0
    * Support connection to MongoAtlas using `mongodb+srv` protocol   
+   * Pin dnspython to `2.1.*`
    * Bump `pymongo` from `3.10.*` to `3.12.*`
    * Bump `tzlocal` from `2.0.*` to `2.1.*`
    * Bump dev and test dependencies
