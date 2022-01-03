@@ -276,15 +276,11 @@ def get_connection_string(config: Dict):
 
     query_string = parse.urlencode(connection_query)
 
-    connection_string = '{protocol}://{user}:{password}@{host}{port}/{database}?{query_string}'.format(
-        protocol='mongodb+srv' if srv else 'mongodb',
-        user=config['user'],
-        password=config['password'],
-        host=config['host'],
-        port='' if srv else ':{port}'.format(port=int(config['port'])),
-        database=config['database'],
-        query_string=query_string
-    )
+    port = "" if srv else f":{int(config['port'])}"
+
+    connection_string = f'{"mongodb+srv" if srv else "mongodb"}://{config["user"]}:' \
+                        f'{config["password"]}@{config["host"]}' \
+                        f'{port}/{config["database"]}?{query_string}'
 
     return connection_string
 
