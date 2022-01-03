@@ -16,13 +16,13 @@ setup(name='pipelinewise-tap-mongodb',
       install_requires=[
           'pipelinewise-singer-python==1.*',
           'pymongo==3.12.*',
-          'tzlocal>=2.0,<2.2',
+          'tzlocal==2.1.*',
           'terminaltables==3.1.*',
           'dnspython>=2.0,<2.2',
       ],
       extras_require={
           'dev': [
-              'pylint==2.9.*',
+              'pylint==2.12',
               'ipdb==0.13.*'
           ],
           'test': [
