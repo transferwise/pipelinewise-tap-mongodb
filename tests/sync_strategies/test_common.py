@@ -35,6 +35,25 @@ class TestRowToSchemaMessage(unittest.TestCase):
             constant_mock.return_value = True
             self.assertEqual('myDb-myStream', common.calculate_destination_stream_name(stream))
 
+    def test_calculate_destination_stream_name_with_dashes_and_with_include_schema_True(self):
+        """
+
+        """
+        stream = {
+            'stream': 'my-stream-with-dashes',
+            'metadata': [
+                {
+                    "breadcrumb": [],
+                    "metadata": {
+                        "database-name": "my-db-with-dashes",
+                    }
+                }
+            ]
+        }
+        with patch('tap_mongodb.common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME') as constant_mock:
+            constant_mock.return_value = True
+            self.assertEqual('my_db_with_dashes-my_stream_with_dashes', common.calculate_destination_stream_name(stream))
+
     def test_calculate_destination_stream_name_with_include_schema_False(self):
         """
 
@@ -52,6 +71,24 @@ class TestRowToSchemaMessage(unittest.TestCase):
         }
         common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = False
         self.assertEqual('myStream', common.calculate_destination_stream_name(stream))
+
+    def test_calculate_destination_stream_name_with_dashes_and_with_include_schema_False(self):
+        """
+
+        """
+        stream = {
+            'stream': 'my-stream-with-dashes',
+            'metadata': [
+                {
+                    "breadcrumb": [],
+                    "metadata": {
+                        "database-name": "my-db-with-dashes",
+                    }
+                }
+            ]
+        }
+        common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = False
+        self.assertEqual('my_stream_with_dashes', common.calculate_destination_stream_name(stream))
 
     def test_get_stream_version_with_none_version_returns_new_version(self):
 

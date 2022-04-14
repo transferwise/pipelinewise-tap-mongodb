@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+   * Replace "-" with "_" in stream names to fix schema parsing in ppw targets
+
+
 ## 1.3.0
    * Support connection to MongoAtlas using `mongodb+srv` protocol   
    * Pin dnspython to `2.1.*`
