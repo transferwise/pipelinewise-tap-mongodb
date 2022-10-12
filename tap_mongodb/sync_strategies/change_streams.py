@@ -1,6 +1,7 @@
 import copy
 import time
 import singer
+import pymongo
 
 from typing import Set, Dict, Optional, Generator
 from pymongo.collection import Collection
@@ -74,7 +75,8 @@ def sync_database(database: Database,
                   streams_to_sync: Dict[str, Dict],
                   state: Dict,
                   update_buffer_size: int,
-                  await_time_ms: int
+                  await_time_ms: int,
+                  full_load_on_empty_state: str
                   ) -> None:
     """
     Syncs the records from the given collection using ChangeStreams
@@ -90,12 +92,32 @@ def sync_database(database: Database,
     rows_saved = {}
     start_time = time.time()
     update_buffer = {}
+    full_load = list()
 
     for stream_id in streams_to_sync:
         update_buffer[stream_id] = set()
         rows_saved[stream_id] = 0
+        if full_load_on_empty_state:
+            # get streams where no previous token exists in state
+            if not singer.get_bookmark(state, stream_id, 'token'):
+                full_load.append(stream_id)
 
     stream_ids = set(streams_to_sync.keys())
+
+    # perform full load if no previous token exists
+    if full_load_on_empty_state:
+        for tap_stream_id in full_load:
+            table_name = streams_to_sync[tap_stream_id].get('table_name')
+            collection = database[table_name]
+
+            # TODO: add batches
+            with collection.find(sort=[("_id", pymongo.ASCENDING)]) as cursor:
+                for row in cursor:
+                    rows_saved[tap_stream_id] += 1
+                    singer.write_message(common.row_to_singer_record(stream=streams_to_sync[tap_stream_id],
+                                                                    row=row,
+                                                                    time_extracted=utils.now(),
+                                                                    time_deleted=None))
 
     # Init a cursor to listen for changes from the last saved resume token
     # if there are no changes after MAX_AWAIT_TIME_MS, then we'll exit
@@ -147,9 +169,9 @@ def sync_database(database: Database,
 
             if operation == 'insert':
                 singer.write_message(common.row_to_singer_record(stream=streams_to_sync[tap_stream_id],
-                                                                 row=change['fullDocument'],
-                                                                 time_extracted=utils.now(),
-                                                                 time_deleted=None))
+                                                                row=change['fullDocument'],
+                                                                time_extracted=utils.now(),
+                                                                time_deleted=None))
 
                 rows_saved[tap_stream_id] += 1
 

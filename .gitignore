@@ -110,3 +110,6 @@ catalog*.json
 
 # Jetbrains .idea
 .idea
+
+# vscode .vscode
+.vscode
