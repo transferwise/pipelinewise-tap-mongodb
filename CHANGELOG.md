@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+Added flag to trigger full table load when performing LOG_BASED replication with no previous state token present.
+
 ## 1.3.0
    * Support connection to MongoAtlas using `mongodb+srv` protocol   
    * Pin dnspython to `2.1.*`

@@ -1,6 +1,6 @@
 from typing import Dict
 
-from tap_mongodb.errors import InvalidAwaitTimeError, InvalidUpdateBufferSizeError
+from tap_mongodb.errors import InvalidAwaitTimeError, InvalidLogBasedFullLoadOnEmptyState, InvalidUpdateBufferSizeError
 from tap_mongodb.sync_strategies import change_streams
 
 
@@ -38,3 +38,9 @@ def validate_config(config: Dict) -> None:
         if await_time_ms <= 0:
             raise InvalidAwaitTimeError(
                 await_time_ms, 'time must be > 0')
+
+    if 'full_load_on_empty_state' in config:
+        full_load_on_empty_state = config['full_load_on_empty_state']
+        
+        if full_load_on_empty_state.lower() not in ['true', 'false']:
+            raise InvalidLogBasedFullLoadOnEmptyState(full_load_on_empty_state, 'expected string boolean.')

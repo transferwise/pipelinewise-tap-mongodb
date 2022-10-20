@@ -172,7 +172,8 @@ def sync_log_based_streams(client: MongoClient,
                            database_name: str,
                            state: Dict,
                            update_buffer_size: Optional[int],
-                           await_time_ms: Optional[int]
+                           await_time_ms: Optional[int],
+                           full_load_on_empty_state: str
                            ):
     """
     Sync log_based streams all at once by listening on the database-level change streams events.
@@ -183,6 +184,7 @@ def sync_log_based_streams(client: MongoClient,
         state: state dictionary
         update_buffer_size: the size of buffer used to hold detected updates
         await_time_ms:  the maximum time in milliseconds for the log based to wait for changes before exiting
+        full_load_on_empty_state: a flag to execute full load on collections when a resume token doesnt exist.
     """
     if not log_based_streams:
         return
@@ -206,7 +208,7 @@ def sync_log_based_streams(client: MongoClient,
         update_buffer_size = update_buffer_size or change_streams.MIN_UPDATE_BUFFER_LENGTH
         await_time_ms = await_time_ms or change_streams.DEFAULT_AWAIT_TIME_MS
 
-        change_streams.sync_database(client[database_name], streams, state, update_buffer_size, await_time_ms)
+        change_streams.sync_database(client[database_name], streams, state, update_buffer_size, await_time_ms, full_load_on_empty_state)
 
     state = singer.set_currently_syncing(state, None)
     singer.write_message(singer.StateMessage(value=copy.deepcopy(state)))
@@ -238,7 +240,8 @@ def do_sync(client: MongoClient, catalog: Dict, config: Dict, state: Dict):
                            config['database'],
                            state,
                            config.get('update_buffer_size'),
-                           config.get('await_time_ms')
+                           config.get('await_time_ms'),
+                           config.get('full_load_on_empty_state')
                            )
     LOGGER.debug('Sync of log based streams done')
 
@@ -323,3 +326,7 @@ def main():
     except Exception as exc:
         LOGGER.exception(exc)
         raise exc
+
+
+if __name__ == "__main__":
+    main()

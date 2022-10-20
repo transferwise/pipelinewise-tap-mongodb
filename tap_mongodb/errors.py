@@ -39,3 +39,9 @@ class InvalidAwaitTimeError(Exception):
     def __init__(self, time_ms, reason):
         msg = f"Invalid await time {time_ms}! {reason}"
         super().__init__(msg)
+
+class InvalidLogBasedFullLoadOnEmptyState(Exception):
+    """Raised if the given log based full load on empty state in log_based invalid"""
+    def __init__(self, full_load_on_empty_state, reason) -> None:
+        msg = f"Invalid full load on empty state arg {full_load_on_empty_state}! {reason}"
+        super().__init__(msg)

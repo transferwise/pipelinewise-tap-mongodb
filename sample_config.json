@@ -9,5 +9,6 @@
   "verify_mode": "<SSL verify mode | optional, default 'true'>",
   "ssl": "<enable SSL | optional>",
   "update_buffer_size": "<int>",
-  "await_time_ms": "<int>"
+  "await_time_ms": "<int>",
+  "full_load_on_empty_state": "<bool>"
 }
