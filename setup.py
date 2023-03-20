@@ -21,7 +21,7 @@ setup(name='pipelinewise-tap-mongodb',
       install_requires=[
           'pipelinewise-singer-python==1.*',
           'pymongo==3.12.*',
-          'tzlocal==2.1.*',
+          'tzlocal>=2.1,<4.4',
           'terminaltables==3.1.*',
           'dnspython==2.1.*',
       ],
