@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
     long_desc = fh.read()
 
 setup(name='pipelinewise-tap-mongodb',
-      version='1.3.0',
+      version='1.4.0',
       description='Singer.io tap for extracting data from MongoDB - Pipelinewise compatible',
       long_description=long_desc,
       long_description_content_type='text/markdown',
@@ -20,7 +20,7 @@ setup(name='pipelinewise-tap-mongodb',
       py_modules=['tap_mongodb'],
       install_requires=[
           'pipelinewise-singer-python==1.*',
-          'pymongo==3.12.*',
+          'pymongo==4.7.*',
           'tzlocal==2.1.*',
           'terminaltables==3.1.*',
           'dnspython==2.1.*',

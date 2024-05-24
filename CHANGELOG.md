@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0
+   * Bump `pymongo` from `3.12.*` to `4.7.*`
+
+
 ## 1.3.0
    * Support connection to MongoAtlas using `mongodb+srv` protocol   
    * Pin dnspython to `2.1.*`
