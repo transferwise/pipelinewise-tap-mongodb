@@ -103,7 +103,7 @@ def string_to_class(str_value: str, type_value: str) -> Any:
     """
 
     conversion = {
-        'UUID': uuid.UUID,
+        'UUID': lambda val: bson.Binary.from_uuid(uuid.UUID(val)),
         'datetime': singer.utils.strptime_with_tz,
         'int': int,
         'Int64': bson.int64.Int64,
@@ -169,6 +169,7 @@ def transform_value(value: Any, path) -> Any:
         datetime.datetime: lambda val, _: class_to_string(val, 'datetime'),
         bson.decimal128.Decimal128: lambda val, _: val.to_decimal(),
         bson.regex.Regex: lambda val, _: dict(pattern=val.pattern, flags=val.flags),
+        bson.binary.Binary: lambda val, _: class_to_string(val, 'bytes'),
         bson.code.Code: lambda val, _: dict(value=str(val), scope=str(val.scope)) if val.scope else str(val),
         bson.dbref.DBRef: lambda val, _: dict(id=str(val.id), collection=val.collection, database=val.database),
     }
