@@ -114,7 +114,7 @@ class TestRowToSchemaMessage(unittest.TestCase):
 
     def test_string_to_class_with_UUID(self):
         uid = '123e4567-e89b-12d3-a456-426652340000'
-        self.assertEqual(uuid.UUID(uid), common.string_to_class(uid, 'UUID'))
+        self.assertEqual(bson.Binary.from_uuid(uuid.UUID(uid)), common.string_to_class(uid, 'UUID'))
 
     def test_string_to_class_with_formatted_utc_datetime(self):
         dt = '2020-05-10T12:01:50.000000Z'
