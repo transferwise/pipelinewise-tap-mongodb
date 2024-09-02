@@ -1,3 +1,10 @@
+# Notice
+To better serve Wise business and customer needs, the PipelineWise codebase needs to shrink.
+We have made the difficult decision that, going forward many components of PipelineWise will be removed or incorporated in the main repo.
+The last version before this decision is [v0.64.1](https://github.com/transferwise/pipelinewise/tree/v0.64.1)
+
+We thank all in the open-source community, that over the past 6 years, have helped to make PipelineWise a robust product for heterogeneous replication of many many Terabytes, daily
+
 # pipelinewise-tap-mongodb
 
 This is a [Singer](https://singer.io) tap that produces JSON-formatted data following the [Singer spec](https://github.com/singer-io/getting-started/blob/master/SPEC.md) from a MongoDB source.
@@ -16,7 +23,7 @@ make setup
 
 ## Set up Config file
 
-Create json file called `config.json`, with the following contents: 
+Create json file called `config.json`, with the following contents:
 ```json
 {
   "password": "<password>",
@@ -39,7 +46,7 @@ The following parameters are optional for your config file:
 | `update_buffer_size` | int | 1 | [LOG_BASED] The size of the buffer that holds detected update operations in memory, the buffer is flushed once the size is reached |
 | `await_time_ms` | int | 1000 | [LOG_BASED] The maximum amount of time in milliseconds the loge_base method waits for new data changes before exiting. |
 
-All of the above attributes are required by the tap to connect to your mongo instance. 
+All of the above attributes are required by the tap to connect to your mongo instance.
 here is a [sample configuration file](./sample_config.json).
 
 ## Run in discovery mode
