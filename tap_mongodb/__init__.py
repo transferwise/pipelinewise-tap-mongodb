@@ -253,11 +253,16 @@ def get_connection_string(config: Dict):
 
     Returns: A MongoClient connection string
     """
-    srv = config.get('srv') == 'true'
+    uri = config.get('uri')
+    if uri is not None:
+        LOGGER.debug('using uri %s', uri)
+        return uri
+
+    srv = config.get('srv') is True or config.get('srv') == 'true'
 
     # Default SSL verify mode to true, give option to disable
-    verify_mode = config.get('verify_mode', 'true') == 'true'
-    use_ssl = config.get('ssl') == 'true'
+    verify_mode = config.get('verify_mode') is True or config.get('verify_mode', 'true') == 'true'
+    use_ssl = config.get('ssl') is True or config.get('ssl') == 'true'
 
     connection_query = {
         'readPreference': 'secondaryPreferred',
@@ -291,7 +296,7 @@ def main_impl():
     """
     args = utils.parse_args(REQUIRED_CONFIG_KEYS)
     config = args.config
-    srv = config.get('srv') == 'true'
+    srv = config.get('srv') is True or config.get('srv') == 'true'
 
     if not srv:
         args = utils.parse_args(REQUIRED_CONFIG_KEYS_NON_SRV)
@@ -305,7 +310,7 @@ def main_impl():
                 client.server_info().get('version', 'unknown'))
 
     common.INCLUDE_SCHEMAS_IN_DESTINATION_STREAM_NAME = \
-        (config.get('include_schemas_in_destination_stream_name') == 'true')
+        (config.get('include_schemas_in_destination_stream_name') is True or config.get('include_schemas_in_destination_stream_name') == 'true')
 
     if args.discover:
         do_discover(client, config)
